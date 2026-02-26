@@ -95,6 +95,29 @@ def run_action(pf, state, action, **kwargs):
     print(msg)
 
 
+MIN_STORY_CHARS = 5500
+
+
+def check_draft_length(pf, state):
+    """writing_decision 단계에서 approve 시 draft 분량 검증."""
+    if state.step != Step.WRITING_DECISION.value:
+        return None
+    if not state.draft_files:
+        return None
+    for df in state.draft_files:
+        draft_path = pf.root / df
+        if not draft_path.exists():
+            continue
+        text = draft_path.read_text(encoding="utf-8")
+        char_count = ProjectFiles.count_story_chars(text)
+        if char_count < MIN_STORY_CHARS:
+            return (
+                f"원고 분량 미달: {df} ({char_count:,}자 / 최소 {MIN_STORY_CHARS:,}자). "
+                f"{MIN_STORY_CHARS - char_count:,}자 추가 필요."
+            )
+    return None
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -124,6 +147,10 @@ def main(argv=None):
     elif args.command == "retry":
         run_action(pf, state, "retry")
     elif args.command == "approve":
+        err = check_draft_length(pf, state)
+        if err:
+            print(display.error(err))
+            sys.exit(1)
         run_action(pf, state, "approve")
     elif args.command == "revise":
         run_action(pf, state, "revise", feedback=args.feedback)

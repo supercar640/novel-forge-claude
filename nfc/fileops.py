@@ -124,6 +124,25 @@ class ProjectFiles:
         return (self.root / relative_path).read_text(encoding="utf-8")
 
     @staticmethod
+    def count_story_chars(text: str) -> int:
+        """원고 본문 글자 수 계산. 마크다운 헤더, 구분선, 끝 태그, 테이블, 빈 줄 제외."""
+        count = 0
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#"):
+                continue
+            if stripped == "---":
+                continue
+            if stripped.startswith("*>"):
+                continue
+            if stripped.startswith("|"):
+                continue
+            count += len(stripped)
+        return count
+
+    @staticmethod
     def validate_encoding(filepath: Path) -> bool:
         """파일의 UTF-8 인코딩 무결성 검증. 손상 시 False 반환."""
         try:
