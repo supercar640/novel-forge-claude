@@ -24,6 +24,7 @@ VALID_ACTIONS: dict[tuple[str, str], list[str]] = {
     (Phase.PHASE3.value, Step.STYLE_SETUP.value): ["config", "next"],
     (Phase.PHASE3.value, Step.MODE_SELECTION.value): ["config", "next", "switch-auto"],
     (Phase.PHASE3.value, Step.WRITING.value): ["save", "next", "switch-auto"],
+    (Phase.PHASE3.value, Step.SCENE_DECISION.value): ["approve", "revise", "reject", "merge-episode", "scenes"],
     (Phase.PHASE3.value, Step.WRITING_DECISION.value): ["approve", "revise", "reject", "pd-proofread"],
     # Phase 4
     (Phase.PHASE4.value, Step.PROOFREADING.value): ["save", "next", "pd-proofread"],
@@ -62,6 +63,11 @@ TRANSITIONS: dict[tuple[str, str, str], tuple[str, str]] = {
     (Phase.PHASE3.value, Step.STYLE_SETUP.value, "next"): (Phase.PHASE3.value, Step.MODE_SELECTION.value),
     (Phase.PHASE3.value, Step.MODE_SELECTION.value, "next"): (Phase.PHASE3.value, Step.WRITING.value),
     (Phase.PHASE3.value, Step.WRITING.value, "next"): (Phase.PHASE3.value, Step.WRITING_DECISION.value),
+    # Scene mode transitions
+    (Phase.PHASE3.value, Step.SCENE_DECISION.value, "approve"): (Phase.PHASE3.value, Step.WRITING.value),
+    (Phase.PHASE3.value, Step.SCENE_DECISION.value, "revise"): (Phase.PHASE3.value, Step.WRITING.value),
+    (Phase.PHASE3.value, Step.SCENE_DECISION.value, "reject"): (Phase.PHASE3.value, Step.WRITING.value),
+    (Phase.PHASE3.value, Step.SCENE_DECISION.value, "merge-episode"): (Phase.PHASE3.value, Step.WRITING_DECISION.value),
     (Phase.PHASE3.value, Step.WRITING_DECISION.value, "approve"): (Phase.PHASE4.value, Step.PROOFREADING.value),
     (Phase.PHASE3.value, Step.WRITING_DECISION.value, "revise"): (Phase.PHASE3.value, Step.WRITING.value),
     (Phase.PHASE3.value, Step.WRITING_DECISION.value, "reject"): (Phase.PHASE3.value, Step.WRITING.value),
@@ -141,6 +147,10 @@ def validate_action(state: ProjectState, action: str, **kwargs) -> str | None:
         filepath = kwargs.get("filepath", "")
         if not filepath:
             return "퇴고된 원고 파일 경로를 지정하세요."
+
+    if action == "merge-episode":
+        if not state.draft_files:
+            return "병합할 장면 파일이 없습니다."
 
     if action == "next":
         # Phase 1 direction_proposal: 항목이 있어야 진행
@@ -235,6 +245,12 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
             state.items = []
             state.draft_files = []
             state.import_file = None
+        # Scene mode: scene_decision approve → scene_count++, draft_files 유지
+        if old_step == Step.SCENE_DECISION.value:
+            state.scene_count += 1
+            msg = display.ok(f"장면 {state.scene_count} 승인 완료")
+            msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동 (다음 장면)")
+            return state, msg
         msg = display.ok("승인 완료")
         msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동")
         return state, msg
@@ -242,10 +258,20 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
     if action == "revise":
         feedback = kwargs.get("feedback", "")
         state.revision_feedback = feedback
+        old_step = state.step
         next_phase, next_step = TRANSITIONS[(state.phase, state.step, "revise")]
         state.phase = next_phase
         state.step = next_step
-        state.draft_files = []
+        # Scene mode: scene_decision revise → 마지막 장면만 제거 (나머지 유지)
+        if old_step == Step.SCENE_DECISION.value:
+            if state.draft_files:
+                state.draft_files.pop()
+        # WRITING_DECISION revise → scene_count 리셋
+        elif old_step == Step.WRITING_DECISION.value:
+            state.scene_count = 0
+            state.draft_files = []
+        else:
+            state.draft_files = []
         msg = display.ok(f"수정 요청: {feedback}")
         msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동")
         return state, msg
@@ -256,7 +282,16 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         state.phase = next_phase
         state.step = next_step
         state.revision_feedback = None
-        state.draft_files = []
+        # Scene mode: scene_decision reject → 마지막 장면만 제거
+        if old_step == Step.SCENE_DECISION.value:
+            if state.draft_files:
+                state.draft_files.pop()
+        # WRITING_DECISION reject → scene_count 리셋
+        elif old_step == Step.WRITING_DECISION.value:
+            state.scene_count = 0
+            state.draft_files = []
+        else:
+            state.draft_files = []
         # v1.5: import_review 거부 시 import_file 정리
         if old_step == Step.IMPORT_REVIEW.value:
             state.import_file = None
@@ -348,12 +383,32 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         state.config["auto_write"] = True
         return state, display.ok("자동작성(auto) 모드로 전환됨. AI가 3화 분량을 자율 연쓰기합니다.")
 
+    # Scene mode: merge-episode (실제 파일 병합은 cli/interactive에서 처리)
+    if action == "merge-episode":
+        merged_file = kwargs.get("merged_file", "")
+        state.draft_files = [merged_file]
+        state.scene_count = 0
+        next_phase, next_step = TRANSITIONS[(state.phase, state.step, "merge-episode")]
+        state.phase = next_phase
+        state.step = next_step
+        msg = display.ok(f"장면 병합 완료: {merged_file}")
+        msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동")
+        return state, msg
+
+    # Scene mode: scenes (상태 변경 없음, 표시만)
+    if action == "scenes":
+        return state, ""
+
     if action == "next":
         key = (state.phase, state.step, "next")
         if key not in TRANSITIONS:
             return state, display.error(f"현재 단계에서 'next' 전이가 정의되지 않았습니다.")
 
         next_phase, next_step = TRANSITIONS[key]
+
+        # Scene mode: WRITING → SCENE_DECISION (episode mode이면 WRITING_DECISION 유지)
+        if state.step == Step.WRITING.value and state.config.get("writing_mode") == "scene":
+            next_step = Step.SCENE_DECISION.value
 
         # Phase 4 complete → Phase 2: 에피소드 카운트 증가, items 초기화
         if state.step == Step.COMPLETE.value:
@@ -367,6 +422,7 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
                 else:
                     pd_count += 1
             state.episode_count += max(pd_count, auto_count, 1)
+            state.scene_count = 0
             state.items = []
             state.selected_developments = []
             state.draft_files = []

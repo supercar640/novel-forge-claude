@@ -17,7 +17,7 @@ TITLE_PATTERN = re.compile(r"^[a-zA-Z0-9_ -]+$")
 NO_ARG_COMMANDS = frozenset({
     "status", "items", "next", "approve", "reject", "retry",
     "confirm-end", "context-update", "context-backup",
-    "import-context", "switch-auto",
+    "import-context", "switch-auto", "merge-episode", "scenes",
     "quit", "exit",
 })
 
@@ -179,6 +179,7 @@ def resolve_context_alias(cmd: str, state: ProjectState) -> str:
         Step.PROOFREAD_DECISION.value,
         Step.DEVELOPMENT_CONFIRM.value,
         Step.IMPORT_REVIEW.value,
+        Step.SCENE_DECISION.value,
     }
     if cmd == "discard" and state.step in review_steps:
         return "reject"
@@ -202,6 +203,45 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
 
     if cmd == "items":
         print(display.format_items(state))
+        return state
+
+    # scenes: 장면 목록 표시 (상태 변경 없음)
+    if cmd == "scenes":
+        print(display.format_scenes(pf, state))
+        return state
+
+    # merge-episode needs special handling (file merge + state update)
+    if cmd == "merge-episode":
+        from .fileops import ProjectFiles as _PF
+        err = validate_action(state, "merge-episode")
+        if err:
+            print(display.error(err))
+            return state
+        scene_files = [df for df in state.draft_files if Path(df).name.startswith("sc")]
+        if not scene_files:
+            print(display.error("병합할 장면 파일이 없습니다."))
+            return state
+        # 병합 전 누적 글자 수 검증
+        total_chars = 0
+        for sf in scene_files:
+            sf_path = pf.root / sf
+            if sf_path.exists():
+                total_chars += _PF.count_story_chars(sf_path.read_text(encoding="utf-8"))
+        if total_chars < 5500:
+            print(display.error(
+                f"병합 불가: 누적 {total_chars:,}자 / 최소 5,500자. "
+                f"{5500 - total_chars:,}자 추가 필요. 장면을 더 작성하세요."
+            ))
+            return state
+        merged_path = pf.merge_scenes(scene_files)
+        merged_rel = str(merged_path.relative_to(pf.root))
+        state, msg = execute_action(state, "merge-episode", merged_file=merged_rel)
+        pf.save_state(state)
+        print(msg)
+        # 병합 결과 글자 수 표시
+        text = merged_path.read_text(encoding="utf-8")
+        char_count = _PF.count_story_chars(text)
+        print(display.ok(f"병합 결과: {char_count:,}자 (기준: 5,500자)"))
         return state
 
     # context-backup needs special handling (file backup + state update)
@@ -329,7 +369,7 @@ def run() -> None:
         # Check if it's a known command
         known = NO_ARG_COMMANDS | {
             "add", "select", "hold", "discard", "revise", "config", "save",
-            "import-manuscript", "pd-proofread",
+            "import-manuscript", "pd-proofread", "merge-episode", "scenes",
         }
         if cmd not in known:
             print(display.error(f"Unknown command: {cmd}"))

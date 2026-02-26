@@ -115,6 +115,16 @@ class ProjectFiles:
         shutil.copytree(self.context_dir, backup_dest)
         return backup_dest
 
+    def merge_scenes(self, scene_files: list[str]) -> Path:
+        """장면 파일들을 하나의 에피소드 초안으로 병합."""
+        contents = []
+        for sf in scene_files:
+            path = self.root / sf
+            if path.exists():
+                contents.append(path.read_text(encoding="utf-8"))
+        merged = "\n\n".join(contents)
+        return self.save_draft("ep_draft.md", merged)
+
     def file_exists(self, relative_path: str) -> bool:
         """프로젝트 루트 기준 파일 존재 확인."""
         return (self.root / relative_path).exists()

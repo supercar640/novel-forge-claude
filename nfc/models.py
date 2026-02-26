@@ -34,6 +34,7 @@ class Step(str, Enum):
     STYLE_SETUP = "style_setup"
     MODE_SELECTION = "mode_selection"
     WRITING = "writing"
+    SCENE_DECISION = "scene_decision"
     WRITING_DECISION = "writing_decision"
     # Phase 4
     PROOFREADING = "proofreading"
@@ -79,6 +80,7 @@ class ProjectState:
     phase: str = Phase.PHASE1.value
     step: str = Step.DIRECTION_PROPOSAL.value
     episode_count: int = 0
+    scene_count: int = 0
     context_version: int = 0
     items: list[Item] = field(default_factory=list)
     selected_developments: list[str] = field(default_factory=list)
@@ -94,6 +96,7 @@ class ProjectState:
             "phase": self.phase,
             "step": self.step,
             "episode_count": self.episode_count,
+            "scene_count": self.scene_count,
             "context_version": self.context_version,
             "items": [item.to_dict() for item in self.items],
             "selected_developments": self.selected_developments,
@@ -112,6 +115,7 @@ class ProjectState:
             phase=d.get("phase", Phase.PHASE1.value),
             step=d.get("step", Step.DIRECTION_PROPOSAL.value),
             episode_count=d.get("episode_count", 0),
+            scene_count=d.get("scene_count", 0),
             context_version=d.get("context_version", 0),
             items=items,
             selected_developments=d.get("selected_developments", []),

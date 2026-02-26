@@ -29,6 +29,7 @@ STEP_LABELS = {
     Step.STYLE_SETUP.value: "문체 설정",
     Step.MODE_SELECTION.value: "작성 모드 선택",
     Step.WRITING.value: "집필",
+    Step.SCENE_DECISION.value: "장면 검토",
     Step.WRITING_DECISION.value: "원고 검토",
     # Phase 4
     Step.PROOFREADING.value: "퇴고",
@@ -81,6 +82,8 @@ def format_status(state: ProjectState) -> str:
         f"에피소드: {state.episode_count}화",
     ]
 
+    if state.scene_count > 0:
+        lines.append(f"장면:     {state.scene_count}개 완료")
     if state.import_file:
         lines.append(f"임포트:   {state.import_file}")
     if state.config.get("style_reference"):
@@ -141,3 +144,29 @@ def format_item_short(item: Item) -> str:
     """단일 항목을 짧게 포맷팅."""
     prob_str = f" (prob: {item.probability:.2f})" if item.probability is not None else ""
     return f"{item.id}. {item.text}{prob_str}"
+
+
+def format_scenes(pf, state: ProjectState) -> str:
+    """승인된 장면 목록과 글자 수 표시."""
+    from .fileops import ProjectFiles
+    from pathlib import Path
+
+    scene_files = [df for df in state.draft_files if Path(df).name.startswith("sc")]
+    if not scene_files:
+        return "등록된 장면이 없습니다."
+
+    lines = ["=== 장면 목록 ==="]
+    total_chars = 0
+    for i, sf in enumerate(scene_files, 1):
+        path = pf.root / sf
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+            char_count = ProjectFiles.count_story_chars(text)
+            total_chars += char_count
+            lines.append(f"  {i}. {Path(sf).name} ({char_count:,}자)")
+        else:
+            lines.append(f"  {i}. {Path(sf).name} (파일 없음)")
+
+    lines.append("  " + "─" * 20)
+    lines.append(f"  누적: {total_chars:,}자 / 5,500자 기준")
+    return "\n".join(lines)

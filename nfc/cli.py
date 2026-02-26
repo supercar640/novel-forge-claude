@@ -60,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("context-update", help="context update done")
     sub.add_parser("context-backup", help="context backup")
     sub.add_parser("next", help="next step")
+    sub.add_parser("merge-episode", help="merge scenes into episode")
+    sub.add_parser("scenes", help="list scenes with char counts")
 
     # v1.5: new commands
     p_import_ms = sub.add_parser("import-manuscript", help="import manuscript for analysis")
@@ -177,6 +179,10 @@ def main(argv=None):
         handle_pd_proofread(pf, state, args)
     elif args.command == "switch-auto":
         run_action(pf, state, "switch-auto")
+    elif args.command == "merge-episode":
+        handle_merge_episode(pf, state)
+    elif args.command == "scenes":
+        handle_scenes(pf, state)
     else:
         parser.print_help()
 
@@ -291,3 +297,41 @@ def handle_pd_proofread(pf, state, args):
         print(display.error(f"파일을 찾을 수 없습니다: {filepath}"))
         sys.exit(1)
     run_action(pf, state, "pd-proofread", filepath=filepath)
+
+
+def handle_merge_episode(pf, state):
+    """장면 파일들을 하나의 에피소드로 병합."""
+    err = validate_action(state, "merge-episode")
+    if err:
+        print(display.error(err))
+        sys.exit(1)
+    scene_files = [df for df in state.draft_files if Path(df).name.startswith("sc")]
+    if not scene_files:
+        print(display.error("병합할 장면 파일이 없습니다."))
+        sys.exit(1)
+    # 병합 전 누적 글자 수 검증
+    total_chars = 0
+    for sf in scene_files:
+        sf_path = pf.root / sf
+        if sf_path.exists():
+            total_chars += ProjectFiles.count_story_chars(sf_path.read_text(encoding="utf-8"))
+    if total_chars < MIN_STORY_CHARS:
+        print(display.error(
+            f"병합 불가: 누적 {total_chars:,}자 / 최소 {MIN_STORY_CHARS:,}자. "
+            f"{MIN_STORY_CHARS - total_chars:,}자 추가 필요. 장면을 더 작성하세요."
+        ))
+        sys.exit(1)
+    merged_path = pf.merge_scenes(scene_files)
+    merged_rel = str(merged_path.relative_to(pf.root))
+    state, msg = execute_action(state, "merge-episode", merged_file=merged_rel)
+    pf.save_state(state)
+    print(msg)
+    # 병합 결과 글자 수 표시
+    text = merged_path.read_text(encoding="utf-8")
+    char_count = ProjectFiles.count_story_chars(text)
+    print(display.ok(f"병합 결과: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자)"))
+
+
+def handle_scenes(pf, state):
+    """장면 목록과 글자 수 표시."""
+    print(display.format_scenes(pf, state))
