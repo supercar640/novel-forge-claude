@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.claude/
+
+# 소설 프로젝트 데이터 (사용자별 데이터)
+projects/
+
+# 아이디어/메모
+ideas/
+
+# 테스트용 레거시 프로젝트 (루트 레벨만)
+/ep_test/
+/test_novel/
+/neon_hunters/
