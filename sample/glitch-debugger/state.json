@@ -1,55 +1,18 @@
 {
   "project_name": "글리치 디버거 - 메가시티 서울",
   "novel_title": "glitch-debugger",
-  "phase": "phase4",
-  "step": "complete",
-  "episode_count": 0,
+  "phase": "phase2",
+  "step": "development_proposal",
+  "episode_count": 3,
   "context_version": 0,
-  "items": [
-    {
-      "id": 1,
-      "text": "전이의 전조 — 강남역 퇴근길, 재현의 시야에 설명할 수 없는 노이즈가 끼기 시작한다. 스마트폰 화면이 깨지고, 거리의 조명이 일그러지며, 발밑의 아스팔트가 '접힌다'. 정신을 차리면 어둡고 습한 하부도시의 골목.",
-      "status": "selected",
-      "probability": 0.75
-    },
-    {
-      "id": 2,
-      "text": "야근의 대가 — 새벽 2시, 빈 사무실에서 혼자 야근하던 재현. 모니터에 이상한 코드가 흘러나오고, 화면 속으로 '빨려 들어가는' 감각. 디지털과 물리의 경계가 무너지며 하부도시로 전이. IT 개발자라는 배경이 전이 방식에 반영.",
-      "status": "proposed",
-      "probability": 0.55
-    },
-    {
-      "id": 3,
-      "text": "지하철의 균열 — 강남역 지하철 플랫폼에서 열차를 기다리던 중, 선로 위로 보라빛 균열이 번진다. 아무도 보지 못하는 균열에 재현만 반응하고, 균열이 팽창하며 재현을 삼킨다. 익숙한 강남역이 낯선 하부도시의 녹사평 시장으로 뒤바뀜.",
-      "status": "proposed",
-      "probability": 0.18
-    },
-    {
-      "id": 4,
-      "text": "교통사고의 이면 — 퇴근길 횡단보도에서 트럭이 돌진. 죽음의 순간 시야가 하얗게 변하고, 다음 순간 하부도시에 있다. 죽은 건지 전이된 건지 모호한 상태가 스토리 내내 불안 요소로 작용.",
-      "status": "proposed",
-      "probability": 0.07
-    },
-    {
-      "id": 5,
-      "text": "꿈의 침식 — 평범한 하루를 보내고 잠든 재현. 꿈속에서 낯선 도시를 걷다 '깨어나면' 하부도시다. 현실과 꿈의 경계가 모호해지며, 원래 세계가 진짜인지 이 세계가 진짜인지에 대한 실존적 의문이 1화부터 깔림.",
-      "status": "proposed",
-      "probability": 0.04
-    }
-  ],
-  "selected_developments": [
-    "전이의 전조 — 강남역 퇴근길, 재현의 시야에 설명할 수 없는 노이즈가 끼기 시작한다. 스마트폰 화면이 깨지고, 거리의 조명이 일그러지며, 발밑의 아스팔트가 '접힌다'. 정신을 차리면 어둡고 습한 하부도시의 골목."
-  ],
+  "items": [],
+  "selected_developments": [],
   "config": {
     "style_reference": "없음 — AI 기본 문체(건조하고 간결한 느와르 톤)",
-    "writing_mode": "episode",
-    "auto_write": true
+    "writing_mode": null,
+    "auto_write": false
   },
   "revision_feedback": null,
-  "draft_files": [
-    "drafts/auto_ep1.md",
-    "drafts/auto_ep2.md",
-    "drafts/auto_ep3.md"
-  ],
+  "draft_files": [],
   "import_file": null
 }
