@@ -153,7 +153,7 @@ def parse_input(line: str) -> tuple[str, dict]:
     if cmd == "save":
         if len(rest) < 2:
             return cmd, {"_error": "Usage: save <plan|manuscript|proofread> <filepath>"}
-        return "save", {"filepath": rest[1]}
+        return "save", {"filepath": rest[1], "save_type": rest[0]}
 
     # v1.5: import-manuscript
     if cmd == "import-manuscript":

@@ -237,7 +237,7 @@ def handle_next(pf, state):
 
 def handle_save(pf, state, args):
     filepath = args.file
-    run_action(pf, state, "save", filepath=filepath)
+    run_action(pf, state, "save", filepath=filepath, save_type=args.type)
 
 
 def handle_context_backup(pf, state):

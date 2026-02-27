@@ -312,6 +312,14 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
 
     if action == "save":
         filepath = kwargs.get("filepath", "")
+        save_type = kwargs.get("save_type", "manuscript")
+        # proofread 저장 시 기존 non-auto draft 파일을 교체 (퇴고본이 최종본)
+        if save_type == "proofread":
+            from pathlib import Path as _P
+            state.draft_files = [
+                df for df in state.draft_files
+                if _P(df).name.startswith("auto_")
+            ]
         if filepath not in state.draft_files:
             state.draft_files.append(filepath)
         return state, display.ok(f"초안 저장됨: {filepath}")
