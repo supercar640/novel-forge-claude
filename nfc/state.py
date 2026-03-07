@@ -17,7 +17,7 @@ VALID_ACTIONS: dict[tuple[str, str], list[str]] = {
     (Phase.PHASE1.value, Step.IMPORT_ANALYSIS.value): ["save", "next"],
     (Phase.PHASE1.value, Step.IMPORT_REVIEW.value): ["approve", "revise", "reject"],
     # Phase 2
-    (Phase.PHASE2.value, Step.DEVELOPMENT_PROPOSAL.value): ["add", "next"],
+    (Phase.PHASE2.value, Step.DEVELOPMENT_PROPOSAL.value): ["add", "next", "revise-episode"],
     (Phase.PHASE2.value, Step.DEVELOPMENT_DECISION.value): ["items", "select", "hold", "discard", "retry", "confirm-end"],
     (Phase.PHASE2.value, Step.DEVELOPMENT_CONFIRM.value): ["approve", "reject"],
     # Phase 3
@@ -25,13 +25,13 @@ VALID_ACTIONS: dict[tuple[str, str], list[str]] = {
     (Phase.PHASE3.value, Step.MODE_SELECTION.value): ["config", "next", "switch-auto"],
     (Phase.PHASE3.value, Step.WRITING.value): ["save", "next", "switch-auto"],
     (Phase.PHASE3.value, Step.SCENE_DECISION.value): ["approve", "revise", "reject", "merge-episode", "scenes"],
-    (Phase.PHASE3.value, Step.WRITING_DECISION.value): ["approve", "revise", "reject", "pd-proofread"],
+    (Phase.PHASE3.value, Step.WRITING_DECISION.value): ["approve", "revise", "reject", "hold", "pd-proofread"],
     # Phase 4
     (Phase.PHASE4.value, Step.PROOFREADING.value): ["save", "next", "pd-proofread"],
     (Phase.PHASE4.value, Step.PROOFREAD_DECISION.value): ["approve", "revise", "reject"],
     (Phase.PHASE4.value, Step.CONTEXT_UPDATE.value): ["context-update", "next"],
     (Phase.PHASE4.value, Step.CONTEXT_SIZE_CHECK.value): ["context-backup", "next"],
-    (Phase.PHASE4.value, Step.COMPLETE.value): ["next"],
+    (Phase.PHASE4.value, Step.COMPLETE.value): ["next", "revise-episode"],
 }
 
 # (phase, step, action) → (next_phase, next_step) 또는 callable
@@ -69,6 +69,7 @@ TRANSITIONS: dict[tuple[str, str, str], tuple[str, str]] = {
     (Phase.PHASE3.value, Step.SCENE_DECISION.value, "reject"): (Phase.PHASE3.value, Step.WRITING.value),
     (Phase.PHASE3.value, Step.SCENE_DECISION.value, "merge-episode"): (Phase.PHASE3.value, Step.WRITING_DECISION.value),
     (Phase.PHASE3.value, Step.WRITING_DECISION.value, "approve"): (Phase.PHASE4.value, Step.PROOFREADING.value),
+    (Phase.PHASE3.value, Step.WRITING_DECISION.value, "hold"): (Phase.PHASE3.value, Step.WRITING.value),
     (Phase.PHASE3.value, Step.WRITING_DECISION.value, "revise"): (Phase.PHASE3.value, Step.WRITING.value),
     (Phase.PHASE3.value, Step.WRITING_DECISION.value, "reject"): (Phase.PHASE3.value, Step.WRITING.value),
     # Phase 3 - v1.5 pd-proofread (PD가 직접 퇴고 → 컨텍스트 갱신으로 직행)
@@ -83,6 +84,9 @@ TRANSITIONS: dict[tuple[str, str, str], tuple[str, str]] = {
     (Phase.PHASE4.value, Step.COMPLETE.value, "next"): (Phase.PHASE2.value, Step.DEVELOPMENT_PROPOSAL.value),
     # Phase 4 - v1.5 pd-proofread (퇴고 단계에서 PD 직접 퇴고 → 컨텍스트 갱신으로 직행)
     (Phase.PHASE4.value, Step.PROOFREADING.value, "pd-proofread"): (Phase.PHASE4.value, Step.CONTEXT_UPDATE.value),
+    # v1.7: revise-episode (과거 회차 재수정)
+    (Phase.PHASE2.value, Step.DEVELOPMENT_PROPOSAL.value, "revise-episode"): (Phase.PHASE3.value, Step.WRITING_DECISION.value),
+    (Phase.PHASE4.value, Step.COMPLETE.value, "revise-episode"): (Phase.PHASE3.value, Step.WRITING_DECISION.value),
 }
 
 
@@ -125,6 +129,11 @@ def validate_action(state: ProjectState, action: str, **kwargs) -> str | None:
             return "최소 1개 이상 선정해야 전개 선정을 종료할 수 있습니다."
 
     if action == "hold":
+        # v1.7: writing_decision hold는 item_id 불요
+        if state.step == Step.WRITING_DECISION.value:
+            if not state.draft_files:
+                return "보류할 초안 파일이 없습니다."
+            return None
         item_id = kwargs.get("item_id")
         if item_id is not None:
             item = state.get_item(item_id)
@@ -142,6 +151,11 @@ def validate_action(state: ProjectState, action: str, **kwargs) -> str | None:
         filepath = kwargs.get("filepath", "")
         if not filepath:
             return "임포트할 원고 파일 경로를 지정하세요."
+
+    if action == "revise-episode":
+        filepath = kwargs.get("filepath", "")
+        if not filepath:
+            return "수정할 에피소드 파일을 지정하세요."
 
     if action == "pd-proofread":
         filepath = kwargs.get("filepath", "")
@@ -216,6 +230,17 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         return state, msg
 
     if action == "hold":
+        # v1.7: writing_decision hold → shelve로 보류 후 재작성
+        if state.step == Step.WRITING_DECISION.value:
+            shelve_file = kwargs.get("shelve_file", "")
+            next_phase, next_step = TRANSITIONS[(state.phase, state.step, "hold")]
+            state.phase = next_phase
+            state.step = next_step
+            state.draft_files = []
+            state.scene_count = 0
+            msg = display.ok(f"초안 보류: {shelve_file}")
+            msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동 (새 초안 작성)")
+            return state, msg
         item_id = kwargs.get("item_id")
         item = state.get_item(item_id)
         item.status = ItemStatus.HELD.value
@@ -241,10 +266,11 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         state.step = next_step
         state.revision_feedback = None
         # v1.5: import_review 승인 시 정리
+        # v1.7: episode_count 증가 (임포트 원고 = ep001), import_file은 cli/interactive에서 정리
         if old_step == Step.IMPORT_REVIEW.value:
+            state.episode_count += 1
             state.items = []
             state.draft_files = []
-            state.import_file = None
         # Scene mode: scene_decision approve → scene_count++, draft_files 유지
         if old_step == Step.SCENE_DECISION.value:
             state.scene_count += 1
@@ -331,11 +357,16 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
             if value not in ("scene", "episode"):
                 return state, display.error("writing_mode는 'scene' 또는 'episode'만 가능합니다.")
             state.config["writing_mode"] = value
+            # v1.7: 상호 배타 — writing_mode 설정 시 auto_write 해제
+            state.config["auto_write"] = False
             return state, display.ok(f"설정 변경: 작성모드 = {value}")
         if key == "auto_write":
             if value.lower() not in ("true", "false"):
                 return state, display.error("auto_write는 'true' 또는 'false'만 가능합니다.")
             state.config["auto_write"] = value.lower() == "true"
+            # v1.7: 상호 배타 — auto_write 설정 시 writing_mode 해제
+            if state.config["auto_write"]:
+                state.config["writing_mode"] = None
             return state, display.ok(f"설정 변경: 자동작성 = {state.config['auto_write']}")
         if key not in ("style_reference",):
             return state, display.error(f"알 수 없는 설정 키: {key}. 사용 가능: style_reference, writing_mode, auto_write")
@@ -386,9 +417,26 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동 (AI 퇴고 생략)")
         return state, msg
 
+    # v1.7: revise-episode (과거 회차 재수정)
+    if action == "revise-episode":
+        filepath = kwargs.get("filepath", "")
+        original_episode = kwargs.get("original_episode", "")
+        state.revision_mode = True
+        state.revision_episode = original_episode
+        state.revision_return_phase = state.phase
+        state.revision_return_step = state.step
+        state.draft_files = [filepath]
+        next_phase, next_step = TRANSITIONS[(state.phase, state.step, "revise-episode")]
+        state.phase = next_phase
+        state.step = next_step
+        msg = display.ok(f"에피소드 수정 모드: {original_episode}")
+        msg += "\n" + display.transition(f"{display.STEP_LABELS.get(state.step, state.step)}(으)로 이동")
+        return state, msg
+
     # v1.5: switch-auto
     if action == "switch-auto":
         state.config["auto_write"] = True
+        state.config["writing_mode"] = None  # v1.7: 상호 배타
         return state, display.ok("자동작성(auto) 모드로 전환됨. AI가 3화 분량을 자율 연쓰기합니다.")
 
     # Scene mode: merge-episode (실제 파일 병합은 cli/interactive에서 처리)
@@ -420,23 +468,38 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
 
         # Phase 4 complete → Phase 2: 에피소드 카운트 증가, items 초기화
         if state.step == Step.COMPLETE.value:
-            # PD/auto 트랙별 개수를 세서 최대값만큼 episode_count 증가
-            from pathlib import Path as _Path
-            pd_count = 0
-            auto_count = 0
-            for df in list(dict.fromkeys(state.draft_files)):
-                if _Path(df).name.startswith("auto_"):
-                    auto_count += 1
-                else:
-                    pd_count += 1
-            state.episode_count += max(pd_count, auto_count, 1)
-            state.scene_count = 0
-            state.items = []
-            state.selected_developments = []
-            state.draft_files = []
-            state.revision_feedback = None
-            state.config["writing_mode"] = None
-            state.config["auto_write"] = False
+            # v1.7: revision_mode일 때는 episode_count 증가하지 않고 원래 위치로 복귀
+            if state.revision_mode:
+                next_phase = state.revision_return_phase
+                next_step = state.revision_return_step
+                state.revision_mode = False
+                state.revision_episode = None
+                state.revision_return_phase = None
+                state.revision_return_step = None
+                state.scene_count = 0
+                state.items = []
+                state.draft_files = []
+                state.revision_feedback = None
+                state.config["writing_mode"] = None
+                state.config["auto_write"] = False
+            else:
+                # PD/auto 트랙별 개수를 세서 최대값만큼 episode_count 증가
+                from pathlib import Path as _Path
+                pd_count = 0
+                auto_count = 0
+                for df in list(dict.fromkeys(state.draft_files)):
+                    if _Path(df).name.startswith("auto_"):
+                        auto_count += 1
+                    else:
+                        pd_count += 1
+                state.episode_count += max(pd_count, auto_count, 1)
+                state.scene_count = 0
+                state.items = []
+                state.selected_developments = []
+                state.draft_files = []
+                state.revision_feedback = None
+                state.config["writing_mode"] = None
+                state.config["auto_write"] = False
 
         # Phase 1 context_creation → Phase 2: items 초기화
         if state.step == Step.CONTEXT_CREATION.value:

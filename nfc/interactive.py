@@ -7,7 +7,7 @@ import re
 import shlex
 from pathlib import Path
 
-from .models import ProjectState, Step
+from .models import Phase, ProjectState, Step
 from .fileops import ProjectFiles, find_project_root
 from .state import validate_action, execute_action, get_valid_actions
 from . import display
@@ -134,6 +134,9 @@ def parse_input(line: str) -> tuple[str, dict]:
 
     if cmd in ("hold", "discard"):
         if not rest:
+            # v1.7: hold without id is allowed at writing_decision
+            if cmd == "hold":
+                return cmd, {}
             return cmd, {"_error": f"Usage: {cmd} <id>"}
         try:
             item_id = int(rest[0])
@@ -166,6 +169,12 @@ def parse_input(line: str) -> tuple[str, dict]:
         if not rest:
             return cmd, {"_error": "Usage: pd-proofread <filepath>"}
         return "pd-proofread", {"filepath": rest[0]}
+
+    # v1.7: revise-episode
+    if cmd == "revise-episode":
+        if not rest:
+            return cmd, {"_error": "Usage: revise-episode <episode-file>"}
+        return "revise-episode", {"filepath": rest[0]}
 
     # Unknown command
     return cmd, {}
@@ -264,27 +273,37 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
     # next needs special handling (episode auto-save)
     if cmd == "next":
         if state.step == Step.COMPLETE.value and state.draft_files:
-            pd_num = state.episode_count + 1
-            auto_num = state.episode_count + 1
-            for df in list(dict.fromkeys(state.draft_files)):
-                draft_path = pf.root / df
-                filename = Path(df).name
-                is_auto = filename.startswith("auto_")
-                if is_auto:
-                    prefix = "auto_ep"
-                    episode_num = auto_num
-                    auto_num += 1
-                else:
-                    prefix = "ep"
-                    episode_num = pd_num
-                    pd_num += 1
-                if draft_path.exists():
-                    content = draft_path.read_text(encoding="utf-8")
-                    ep_path = pf.save_episode(episode_num, content, prefix=prefix)
-                    print(display.ok("episode saved: " + ep_path.name))
-                else:
-                    ep_name = f"{prefix}{episode_num:03d}.md"
-                    print(display.ok("episode: episodes/" + ep_name + " (no draft file - manual save needed)"))
+            # v1.7: revision_mode일 때 원본 에피소드 덮어쓰기
+            if state.revision_mode and state.revision_episode:
+                for df in list(dict.fromkeys(state.draft_files)):
+                    draft_path = pf.root / df
+                    if draft_path.exists():
+                        content = draft_path.read_text(encoding="utf-8")
+                        ep_path = pf.episodes_dir / state.revision_episode
+                        ep_path.write_text(content, encoding="utf-8")
+                        print(display.ok(f"에피소드 수정 완료: {ep_path.name}"))
+            else:
+                pd_num = state.episode_count + 1
+                auto_num = state.episode_count + 1
+                for df in list(dict.fromkeys(state.draft_files)):
+                    draft_path = pf.root / df
+                    filename = Path(df).name
+                    is_auto = filename.startswith("auto_")
+                    if is_auto:
+                        prefix = "auto_ep"
+                        episode_num = auto_num
+                        auto_num += 1
+                    else:
+                        prefix = "ep"
+                        episode_num = pd_num
+                        pd_num += 1
+                    if draft_path.exists():
+                        content = draft_path.read_text(encoding="utf-8")
+                        ep_path = pf.save_episode(episode_num, content, prefix=prefix)
+                        print(display.ok("episode saved: " + ep_path.name))
+                    else:
+                        ep_name = f"{prefix}{episode_num:03d}.md"
+                        print(display.ok("episode: episodes/" + ep_name + " (no draft file - manual save needed)"))
 
     # v1.5: import-context needs filesystem validation
     if cmd == "import-context":
@@ -298,6 +317,26 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
             return state
         for f in md_files:
             print(display.ok(f"컨텍스트 파일 발견: {f.name}"))
+
+    # v1.7: revise-episode 처리
+    if cmd == "revise-episode":
+        filepath = kwargs.get("filepath", "")
+        ep_path = pf.episodes_dir / filepath
+        if not ep_path.exists():
+            print(display.error(f"에피소드 파일을 찾을 수 없습니다: episodes/{filepath}"))
+            return state
+        content = ep_path.read_text(encoding="utf-8")
+        draft_name = f"revision_{filepath}"
+        pf.save_draft(draft_name, content)
+        print(display.ok(f"에피소드를 초안으로 복사: {draft_name}"))
+        err = validate_action(state, "revise-episode", filepath=f"drafts/{draft_name}")
+        if err:
+            print(display.error(err))
+            return state
+        state, msg = execute_action(state, "revise-episode", filepath=f"drafts/{draft_name}", original_episode=filepath)
+        pf.save_state(state)
+        print(msg)
+        return state
 
     # v1.5: import-manuscript needs file validation
     if cmd == "import-manuscript":
@@ -318,6 +357,76 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
         if not full_path.exists():
             print(display.error(f"파일을 찾을 수 없습니다: {filepath}"))
             return state
+
+    # v1.7: hold 처리 (Phase 1/2 shelve + Phase 3 writing_decision shelve)
+    if cmd == "hold":
+        # writing_decision hold → draft를 shelve에 저장
+        if state.step == Step.WRITING_DECISION.value:
+            err = validate_action(state, "hold")
+            if err:
+                print(display.error(err))
+                return state
+            shelve_dir = pf.root / "shelve"
+            shelve_dir.mkdir(exist_ok=True)
+            shelve_names = []
+            for df in state.draft_files:
+                draft_path = pf.root / df
+                if draft_path.exists():
+                    content = draft_path.read_text(encoding="utf-8")
+                    filename = f"draft_{Path(df).name}"
+                    target = shelve_dir / filename
+                    counter = 1
+                    while target.exists():
+                        filename = f"draft_{Path(df).stem}_{counter}.md"
+                        target = shelve_dir / filename
+                        counter += 1
+                    target.write_text(content, encoding="utf-8")
+                    shelve_names.append(filename)
+            shelve_file_str = ", ".join(shelve_names) if shelve_names else "없음"
+            state, msg = execute_action(state, "hold", shelve_file=shelve_file_str)
+            pf.save_state(state)
+            print(msg)
+            for name in shelve_names:
+                print(display.ok(f"shelve 디렉토리에 {name}로 저장하였습니다."))
+            return state
+        # Phase 1/2 item hold + shelve 저장
+        item_id = kwargs.get("item_id")
+        err = validate_action(state, cmd, **kwargs)
+        if err:
+            print(display.error(err))
+            return state
+        item = state.get_item(item_id) if item_id is not None else None
+        state, msg = execute_action(state, cmd, **kwargs)
+        pf.save_state(state)
+        print(msg)
+        if item and state.step in (Step.DIRECTION_DECISION.value, Step.DEVELOPMENT_DECISION.value):
+            prefix = "idea" if state.phase == Phase.PHASE1.value else "dev"
+            shelve_path = pf.save_to_shelve(item.text, item.id, prefix, item.probability)
+            print(display.ok(f"shelve 디렉토리에 {shelve_path.name}로 저장하였습니다."))
+        return state
+
+    # v1.7: approve에서 import_review인 경우 에피소드 저장 처리
+    if cmd == "approve":
+        was_import_review = (state.step == Step.IMPORT_REVIEW.value)
+        import_file_path = state.import_file
+        err = validate_action(state, cmd, **kwargs)
+        if err:
+            print(display.error(err))
+            return state
+        state, msg = execute_action(state, cmd, **kwargs)
+        pf.save_state(state)
+        print(msg)
+        if was_import_review and import_file_path:
+            source = pf.root / import_file_path
+            if not source.exists():
+                source = Path(import_file_path)
+            if source.exists():
+                content = source.read_text(encoding="utf-8")
+                ep_path = pf.save_episode(1, content, prefix="ep")
+                print(display.ok(f"임포트 원고 저장: {ep_path.name}"))
+            state.import_file = None
+            pf.save_state(state)
+        return state
 
     # General action flow
     err = validate_action(state, cmd, **kwargs)
@@ -370,6 +479,7 @@ def run() -> None:
         known = NO_ARG_COMMANDS | {
             "add", "select", "hold", "discard", "revise", "config", "save",
             "import-manuscript", "pd-proofread", "merge-episode", "scenes",
+            "revise-episode",
         }
         if cmd not in known:
             print(display.error(f"Unknown command: {cmd}"))

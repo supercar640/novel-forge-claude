@@ -88,6 +88,11 @@ class ProjectState:
     revision_feedback: Optional[str] = None
     draft_files: list[str] = field(default_factory=list)
     import_file: Optional[str] = None
+    # v1.7: 과거 회차 재수정 모드
+    revision_mode: bool = False
+    revision_episode: Optional[str] = None
+    revision_return_phase: Optional[str] = None
+    revision_return_step: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -104,6 +109,10 @@ class ProjectState:
             "revision_feedback": self.revision_feedback,
             "draft_files": self.draft_files,
             "import_file": self.import_file,
+            "revision_mode": self.revision_mode,
+            "revision_episode": self.revision_episode,
+            "revision_return_phase": self.revision_return_phase,
+            "revision_return_step": self.revision_return_step,
         }
 
     @classmethod
@@ -123,6 +132,10 @@ class ProjectState:
             revision_feedback=d.get("revision_feedback"),
             draft_files=cls._migrate_draft_files(d),
             import_file=d.get("import_file"),
+            revision_mode=d.get("revision_mode", False),
+            revision_episode=d.get("revision_episode"),
+            revision_return_phase=d.get("revision_return_phase"),
+            revision_return_step=d.get("revision_return_step"),
         )
 
     @staticmethod

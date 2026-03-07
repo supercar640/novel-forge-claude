@@ -70,6 +70,7 @@ class ProjectFiles:
         (root / "drafts").mkdir()
         (root / "backup").mkdir()
         (root / "polishing").mkdir()
+        (root / "shelve").mkdir()
 
         state = ProjectState(project_name=project_name, novel_title=novel_title)
         pf = cls(root)
@@ -124,6 +125,38 @@ class ProjectFiles:
                 contents.append(path.read_text(encoding="utf-8"))
         merged = "\n\n".join(contents)
         return self.save_draft("ep_draft.md", merged)
+
+    def save_to_shelve(self, text: str, item_id: int, prefix: str,
+                       probability: float = None) -> Path:
+        """v1.7: 보류된 항목을 shelve/ 디렉토리에 저장. 파일 경로 반환."""
+        import re
+        shelve_dir = self.root / "shelve"
+        shelve_dir.mkdir(exist_ok=True)
+
+        # 텍스트에서 slug 생성
+        text_clean = re.sub(r"<[^>]+>", "", text[:50])
+        slug = re.sub(r"[^\w\s-]", "", text_clean)
+        slug = re.sub(r"\s+", "_", slug).strip("_").lower()
+        if not slug:
+            slug = f"item_{item_id}"
+
+        filename = f"{prefix}_{slug}.md"
+        filepath = shelve_dir / filename
+        # 중복 방지
+        counter = 1
+        while filepath.exists():
+            filename = f"{prefix}_{slug}_{counter}.md"
+            filepath = shelve_dir / filename
+            counter += 1
+
+        content = f"# {prefix.capitalize()} (보류)\n\n"
+        content += f"- ID: {item_id}\n"
+        if probability is not None:
+            content += f"- Probability: {probability}\n"
+        content += f"\n{text}\n"
+
+        filepath.write_text(content, encoding="utf-8")
+        return filepath
 
     def file_exists(self, relative_path: str) -> bool:
         """프로젝트 루트 기준 파일 존재 확인."""

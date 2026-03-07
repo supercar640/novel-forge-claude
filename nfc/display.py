@@ -82,6 +82,8 @@ def format_status(state: ProjectState) -> str:
         f"에피소드: {state.episode_count}화",
     ]
 
+    if state.revision_mode:
+        lines.append(f"수정모드: {state.revision_episode} 수정 중")
     if state.scene_count > 0:
         lines.append(f"장면:     {state.scene_count}개 완료")
     if state.import_file:
@@ -103,8 +105,6 @@ def format_status(state: ProjectState) -> str:
         if writing_mode:
             parts.append(_mode_label(writing_mode))
         mode_str = " + ".join(parts)
-        if auto_write and writing_mode:
-            mode_str += "  (병렬)"
         lines.append(f"작성모드: {mode_str}")
     if state.revision_feedback:
         lines.append(f"수정요청: {state.revision_feedback}")
