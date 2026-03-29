@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Novel Forge Claude (NFC) v1.7** — PD(기획자)와 AI가 협업하여 웹소설을 기획하고 집필하는 인터랙티브 작성 도구. 전체 스펙은 `NFC_plan.md`에 정의되어 있다.
+**Novel Factory (NF) v2.0** — PD(기획자)와 AI가 협업하여 웹소설을 기획하고 집필하는 인터랙티브 작성 도구. 전체 스펙은 `NF_v2.0_plan.md`에 정의되어 있다. 범용 AI 가이드는 `AI_GUIDE.md` 참조.
 
-**핵심 원칙**: CLI(`python nfc.py <cmd>`)는 상태 관리 도구일 뿐이고, 콘텐츠 생성은 Claude Code가 직접 수행한다.
+**핵심 원칙**: CLI(`python nf.py <cmd>`)는 상태 관리 도구이고, 콘텐츠 생성은 standalone 모드에서 NF가 직접 AI API를 호출하거나, passthrough 모드에서 Claude Code가 수행한다.
+
+> **v2.0 변경사항**: nfc→nf 리네임, Phase별 AI 프로바이더 지정 가능, `python nf.py`도 하위 호환으로 동작.
 
 ---
 
@@ -57,10 +59,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 사용자가 소설 관련 요청을 하면 **반드시 먼저 신규/계속 여부를 확인**한다.
 
-- **"새 소설 시작하자"** → 신규 작성: 장르/키워드 질문 → `python nfc.py init "<프로젝트명>" --title <디렉토리명>` → Phase 1
-- **"이어서 쓰자"** → Glob `projects/*/state.json` → 프로젝트 선택 → `python nfc.py status` → context/ 읽기 → 해당 단계 이어서 진행
-- **원고 임포트** → 프로젝트 생성 → `python nfc.py import-manuscript "<file>"` → Step 1-6
-- **컨텍스트 임포트** → 프로젝트 생성 → `python nfc.py import-context` → Phase 2 직행
+- **"새 소설 시작하자"** → 신규 작성: 장르/키워드 질문 → `python nf.py init "<프로젝트명>" --title <디렉토리명>` → Phase 1
+- **"이어서 쓰자"** → Glob `projects/*/state.json` → 프로젝트 선택 → `python nf.py status` → context/ 읽기 → 해당 단계 이어서 진행
+- **원고 임포트** → 프로젝트 생성 → `python nf.py import-manuscript "<file>"` → Step 1-6
+- **컨텍스트 임포트** → 프로젝트 생성 → `python nf.py import-context` → Phase 2 직행
 
 ---
 
@@ -81,21 +83,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Step 1-1 방향성 제안** (`direction_proposal`):
 1. 장르/키워드 기반 방향성 5개 생성 (각 2~3줄)
-2. `python nfc.py add "방향성 N: 요약"` × 5 → `python nfc.py next`
+2. `python nf.py add "방향성 N: 요약"` × 5 → `python nf.py next`
 3. 사용자에게 제시: `[S]elect / [H]old / [D]iscard / [R]etry`
 
 **Step 1-3 기획안** (`plan_buildup`):
 1. 선정된 방향성 → 기획안 작성 (세계관, 캐릭터, 플롯 등)
-2. `python nfc.py save plan "drafts/plan_v1.md"` → `python nfc.py next`
+2. `python nf.py save plan "drafts/plan_v1.md"` → `python nf.py next`
 3. `[A]pprove / [M]odify / [D]ismiss`
 
 **Step 1-5 컨텍스트 생성** (`context_creation`):
 1. Write 도구로 context/ 6개 파일 직접 생성
-2. `python nfc.py next` → Phase 2
+2. `python nf.py next` → Phase 2
 
 **Step 1-6 원고 분석** (`import_analysis`):
 1. state.json의 import_file 읽기 → 원고 분석 → context/ 6개 파일 생성
-2. `python nfc.py save plan "drafts/import_analysis.md"` → `python nfc.py next`
+2. `python nf.py save plan "drafts/import_analysis.md"` → `python nf.py next`
 
 **Step 1-7 임포트 검토** (`import_review`):
 - `[A]pprove` → Phase 2 / `[M]odify` → Step 1-6 / `[D]ismiss` → Step 1-1
@@ -107,8 +109,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Step 2-1 전개 옵션** (`development_proposal`):
 1. context/ 6개 + foreshadow.md 읽기 (최초 1회만)
 2. 5개 전개 옵션 생성 (확률 분포 규칙 준수)
-3. `python nfc.py add "<text>전개</text><probability>0.XX</probability>" -p 0.XX` × 5
-4. `python nfc.py next`
+3. `python nf.py add "<text>전개</text><probability>0.XX</probability>" -p 0.XX` × 5
+4. `python nf.py next`
 5. 사용자에게 제시: `[S]elect <번호> (1개만) / [H]old / [D]iscard / [R]etry`
 
 **Step 2-3 전개 확인** (`development_confirm`):
@@ -119,12 +121,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Phase 3: 집필
 
 **Step 3-1 문체** (`style_setup`):
-- 문체 질문 → `python nfc.py config style_reference "<값>"` → `python nfc.py next`
+- 문체 질문 → `python nf.py config style_reference "<값>"` → `python nf.py next`
 
 **Step 3-2 모드** (`mode_selection`):
 - auto/scene/episode 중 택 1 (상호 배타)
-- `python nfc.py config writing_mode "scene|episode"` 또는 `python nfc.py config auto_write "true"`
-- `python nfc.py next`
+- `python nf.py config writing_mode "scene|episode"` 또는 `python nf.py config auto_write "true"`
+- `python nf.py next`
 
 **Step 3-3 집필** (`writing`):
 
@@ -139,9 +141,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 3화 완성 후 `save manuscript` × 3 → `next` → PD 검토
 - 선택 이력 테이블 첨부
 
-*switch-auto*: 집필 중 `python nfc.py switch-auto`로 auto 전환 가능
+*switch-auto*: 집필 중 `python nf.py switch-auto`로 auto 전환 가능
 
-*과거 회차 재수정*: `python nfc.py revise-episode ep001.md` (Phase 2 또는 complete 단계에서)
+*과거 회차 재수정*: `python nf.py revise-episode ep001.md` (Phase 2 또는 complete 단계에서)
 
 ---
 
@@ -157,11 +159,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Step 4-3 컨텍스트 갱신** (`context_update`):
 1. Edit 도구로 context/ 파일 업데이트 (캐릭터, 세계관, 플롯, 테마, 톤, 컨셉)
 2. 복선: foreshadow.md에 추가/삭제, payoff.md에 회수 기록
-3. `python nfc.py context-update` → `python nfc.py next`
+3. `python nf.py context-update` → `python nf.py next`
 
-**Step 4-4 크기 점검**: 필요 시 `python nfc.py context-backup` → 요약본 교체
+**Step 4-4 크기 점검**: 필요 시 `python nf.py context-backup` → 요약본 교체
 
-**Step 4-5 완료**: `python nfc.py next` → episodes/에 저장 → Phase 2 복귀
+**Step 4-5 완료**: `python nf.py next` → episodes/에 저장 → Phase 2 복귀
 
 ---
 
@@ -193,7 +195,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## CLI 명령 레퍼런스
 
-`python nfc.py <command>`
+`python nf.py <command>`
 
 | 명령어 | 설명 |
 |--------|------|
@@ -221,6 +223,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `merge-episode` | 장면 병합 (scene, 5,500자+) |
 | `scenes` | 장면 목록 표시 |
 | `revise-episode <file>` | 완성 에피소드 재수정 |
+| `ai-config` | v2.0: AI 프로바이더 설정 표시 |
+| `ai-provider <type> -m <model> [--phase <phase>]` | v2.0: 프로바이더 설정 |
+| `ai-validate` | v2.0: 프로바이더 설정 검증 |
+| `ai-mode` | v2.0: standalone/passthrough 모드 확인 |
+| `ai-cost` | v2.0: 토큰 사용량 요약 |
 
 ---
 
@@ -242,10 +249,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 projects/{소설제목}/
 ├── state.json
-├── context/          # 6개 필수 + foreshadow.md, payoff.md (선택)
-├── episodes/         # 완성 원고
-├── drafts/           # 작업 중 초안
-├── shelve/           # 보류 항목
+├── ai_config.json       # v2.0: Phase별 AI 프로바이더 설정
+├── cost_log.json        # v2.0: 토큰 사용량 로그
+├── context/             # 6개 필수 + foreshadow.md, payoff.md (선택)
+├── episodes/            # 완성 원고
+├── drafts/              # 작업 중 초안
+├── shelve/              # 보류 항목
 ├── polishing/guideline.md
 └── backup/context_v{N}/
 ```
