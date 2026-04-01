@@ -334,19 +334,26 @@ def handle_next(pf, state):
             df = state.draft_files[-1]  # 최종본만 사용
             draft_path = pf.root / df
             ep_path = pf.episodes_dir / state.revision_episode
+            is_original_copy = Path(df).name.startswith("revision_")
             if draft_path.exists() and ep_path.exists():
                 draft_content = draft_path.read_text(encoding="utf-8")
                 ep_content = ep_path.read_text(encoding="utf-8")
-                if draft_content.strip() != ep_content.strip():
-                    # draft가 수정됨 → draft 내용으로 에피소드 갱신
-                    content = pf.inject_char_count(draft_content)
+                if draft_content.strip() == ep_content.strip():
+                    # 동일 → char count만 재주입
+                    content = pf.inject_char_count(ep_content)
                     ep_path.write_text(content, encoding="utf-8")
-                    print(display.ok(f"에피소드 수정 완료: {ep_path.name}"))
-                else:
-                    # draft가 원본 그대로 → episodes/가 직접 수정된 것으로 간주
+                    print(display.ok(f"에피소드 확인 완료: {ep_path.name}"))
+                elif is_original_copy:
+                    # revision_ 파일(원본 복사본)이 episode와 다름
+                    # → episode가 직접 수정된 것으로 간주, episode 내용 유지
                     content = pf.inject_char_count(ep_content)
                     ep_path.write_text(content, encoding="utf-8")
                     print(display.ok(f"에피소드 확인 완료 (직접 수정 반영): {ep_path.name}"))
+                else:
+                    # 퇴고 산출물(ep_proofread.md 등) → draft 내용으로 갱신
+                    content = pf.inject_char_count(draft_content)
+                    ep_path.write_text(content, encoding="utf-8")
+                    print(display.ok(f"에피소드 수정 완료: {ep_path.name}"))
             elif draft_path.exists():
                 content = draft_path.read_text(encoding="utf-8")
                 content = pf.inject_char_count(content)
