@@ -410,6 +410,12 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
     # v1.5: pd-proofread
     if action == "pd-proofread":
         filepath = kwargs.get("filepath", "")
+        # 기존 non-auto draft 제거 (save proofread와 동일 정리)
+        from pathlib import Path as _P
+        state.draft_files = [
+            df for df in state.draft_files
+            if _P(df).name.startswith("auto_")
+        ]
         if filepath not in state.draft_files:
             state.draft_files.append(filepath)
         next_phase, next_step = TRANSITIONS[(state.phase, state.step, "pd-proofread")]

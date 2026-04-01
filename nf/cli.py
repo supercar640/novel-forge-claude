@@ -329,16 +329,29 @@ def handle_init(args):
 def handle_next(pf, state):
     # context_update -> context_size_check: save episode(s) early for safety
     if state.step == Step.CONTEXT_UPDATE.value and state.draft_files:
-        # v1.7: revision_mode일 때 원본 에피소드 덮어쓰기
+        # v1.7: revision_mode일 때 에피소드 갱신
         if state.revision_mode and state.revision_episode:
-            for df in list(dict.fromkeys(state.draft_files)):
-                draft_path = pf.root / df
-                if draft_path.exists():
-                    content = draft_path.read_text(encoding="utf-8")
-                    content = pf.inject_char_count(content)
-                    ep_path = pf.episodes_dir / state.revision_episode
+            df = state.draft_files[-1]  # 최종본만 사용
+            draft_path = pf.root / df
+            ep_path = pf.episodes_dir / state.revision_episode
+            if draft_path.exists() and ep_path.exists():
+                draft_content = draft_path.read_text(encoding="utf-8")
+                ep_content = ep_path.read_text(encoding="utf-8")
+                if draft_content.strip() != ep_content.strip():
+                    # draft가 수정됨 → draft 내용으로 에피소드 갱신
+                    content = pf.inject_char_count(draft_content)
                     ep_path.write_text(content, encoding="utf-8")
                     print(display.ok(f"에피소드 수정 완료: {ep_path.name}"))
+                else:
+                    # draft가 원본 그대로 → episodes/가 직접 수정된 것으로 간주
+                    content = pf.inject_char_count(ep_content)
+                    ep_path.write_text(content, encoding="utf-8")
+                    print(display.ok(f"에피소드 확인 완료 (직접 수정 반영): {ep_path.name}"))
+            elif draft_path.exists():
+                content = draft_path.read_text(encoding="utf-8")
+                content = pf.inject_char_count(content)
+                ep_path.write_text(content, encoding="utf-8")
+                print(display.ok(f"에피소드 수정 완료: {ep_path.name}"))
         else:
             pd_num = state.episode_count + 1
             auto_num = state.episode_count + 1
@@ -367,11 +380,12 @@ def handle_next(pf, state):
 def handle_save(pf, state, args):
     filepath = args.file
     # proofread 저장 시: 기존 manuscript draft 내용을 proofread 파일로 복사
+    # 단, 이미 존재하면 AI가 작성한 퇴고본으로 간주하여 복사 생략
     if args.type == "proofread" and state.draft_files:
         import shutil
         src_path = pf.root / state.draft_files[-1]
         dst_path = pf.root / filepath
-        if src_path.exists() and src_path.resolve() != dst_path.resolve():
+        if not dst_path.exists() and src_path.exists() and src_path.resolve() != dst_path.resolve():
             dst_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(src_path), str(dst_path))
     run_action(pf, state, "save", filepath=filepath, save_type=args.type)
