@@ -65,6 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("merge-episode", help="merge scenes into episode")
     sub.add_parser("scenes", help="list scenes with char counts")
 
+    p_char_count = sub.add_parser("char-count", help="count story characters in file")
+    p_char_count.add_argument("file", help="file path to count")
+
     # v1.5: new commands
     p_import_ms = sub.add_parser("import-manuscript", help="import manuscript for analysis")
     p_import_ms.add_argument("file", help="manuscript file path")
@@ -249,6 +252,8 @@ def main(argv=None):
         handle_merge_episode(pf, state)
     elif args.command == "scenes":
         handle_scenes(pf, state)
+    elif args.command == "char-count":
+        handle_char_count(pf, state, args)
     # v2.0: AI provider config commands
     elif args.command == "ai-config":
         handle_ai_config(pf)
@@ -544,6 +549,28 @@ def handle_revise_episode(pf, state, args):
 def handle_scenes(pf, state):
     """장면 목록과 글자 수 표시."""
     print(display.format_scenes(pf, state))
+
+
+def handle_char_count(pf, state, args):
+    """파일의 글자 수 표시. webnovel 모드일 때만 5500자 기준 표시."""
+    filepath = Path(args.file)
+    # 상대 경로면 프로젝트 루트 기준으로 해석
+    if not filepath.is_absolute():
+        filepath = pf.root / filepath
+    if not filepath.exists():
+        print(display.error(f"파일을 찾을 수 없습니다: {args.file}"))
+        sys.exit(1)
+    text = filepath.read_text(encoding="utf-8")
+    char_count = ProjectFiles.count_story_chars(text)
+    webnovel = state.config.get("webnovel", True)
+    if webnovel:
+        if char_count >= MIN_STORY_CHARS:
+            print(display.ok(f"{filepath.name}: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자 충족)"))
+        else:
+            diff = MIN_STORY_CHARS - char_count
+            print(display.error(f"{filepath.name}: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자 미달, {diff:,}자 부족)"))
+    else:
+        print(display.ok(f"{filepath.name}: {char_count:,}자"))
 
 
 # v2.0: AI provider config handlers
