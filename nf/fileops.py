@@ -155,7 +155,7 @@ class ProjectFiles:
         return "\n".join(lines)
 
     def save_episode(self, episode_num: int, content: str, prefix: str = "ep") -> Path:
-        """완성 원고 저장. prefix로 트랙 구분 (ep=PD, auto_ep=auto)."""
+        """완성 원고 저장. episodes 디렉토리에는 항상 ep### 형식으로 저장."""
         self.episodes_dir.mkdir(exist_ok=True)
         content = self.inject_char_count(content)
         filename = f"{prefix}{episode_num:03d}.md"
@@ -223,12 +223,11 @@ class ProjectFiles:
 
     @staticmethod
     def count_story_chars(text: str) -> int:
-        """원고 본문 글자 수 계산. 마크다운 헤더, 구분선, 끝 태그, 테이블, 빈 줄 제외."""
-        count = 0
-        for line in text.split("\n"):
+        """원고 본문 글자 수 계산 (공백 포함). 마크다운 헤더, 구분선, 끝 태그, 테이블 줄 제외."""
+        lines = text.split("\n")
+        body_lines = []
+        for line in lines:
             stripped = line.strip()
-            if not stripped:
-                continue
             if stripped.startswith("#"):
                 continue
             if stripped == "---":
@@ -237,8 +236,9 @@ class ProjectFiles:
                 continue
             if stripped.startswith("|"):
                 continue
-            count += len(stripped)
-        return count
+            body_lines.append(line)
+        body = "\n".join(body_lines)
+        return len(body)
 
     @staticmethod
     def validate_encoding(filepath: Path) -> bool:

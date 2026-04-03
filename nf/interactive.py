@@ -288,18 +288,23 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
                         ep_path.write_text(content, encoding="utf-8")
                         print(display.ok(f"에피소드 수정 완료: {ep_path.name}"))
             else:
+                import re
                 pd_num = state.episode_count + 1
                 auto_num = state.episode_count + 1
                 for df in list(dict.fromkeys(state.draft_files)):
                     draft_path = pf.root / df
                     filename = Path(df).name
                     is_auto = filename.startswith("auto_")
-                    if is_auto:
-                        prefix = "auto_ep"
+                    # episodes 디렉토리에는 항상 ep### 형식으로 저장
+                    prefix = "ep"
+                    # draft 파일명에서 에피소드 번호 추출 (auto_ep012.md → 12)
+                    match = re.search(r'(?:auto_)?ep(\d+)', filename)
+                    if match:
+                        episode_num = int(match.group(1))
+                    elif is_auto:
                         episode_num = auto_num
                         auto_num += 1
                     else:
-                        prefix = "ep"
                         episode_num = pd_num
                         pd_num += 1
                     if draft_path.exists():
