@@ -171,6 +171,44 @@ class ProjectFiles:
         shutil.copytree(self.context_dir, backup_dest)
         return backup_dest
 
+    def backup_episode(self, episode_file: str) -> Path:
+        """에피소드 파일을 backup/에 날짜 형식으로 백업.
+
+        ep003.md → ep003_backup260403.md
+        이미 존재하면 ep003_backup260403_2.md, _3.md 순으로 저장.
+        """
+        from datetime import datetime
+
+        self.backup_dir.mkdir(exist_ok=True)
+
+        # 에피소드 파일 경로 확인
+        ep_path = self.episodes_dir / episode_file
+        if not ep_path.exists():
+            raise FileNotFoundError(f"에피소드 파일이 없습니다: {ep_path}")
+
+        # 파일명에서 확장자 분리
+        stem = ep_path.stem  # ep003
+
+        # 날짜 형식: YYMMDD
+        date_str = datetime.now().strftime("%y%m%d")
+
+        # 백업 파일명 생성
+        base_backup_name = f"{stem}_backup{date_str}"
+        backup_path = self.backup_dir / f"{base_backup_name}.md"
+
+        # 중복 시 _2, _3 ... 추가
+        if backup_path.exists():
+            counter = 2
+            while True:
+                backup_path = self.backup_dir / f"{base_backup_name}_{counter}.md"
+                if not backup_path.exists():
+                    break
+                counter += 1
+
+        # 복사
+        shutil.copy2(ep_path, backup_path)
+        return backup_path
+
     def merge_scenes(self, scene_files: list[str]) -> Path:
         """장면 파일들을 하나의 에피소드 초안으로 병합."""
         contents = []

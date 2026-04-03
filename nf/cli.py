@@ -61,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("context-update", help="context update done")
     sub.add_parser("context-backup", help="context backup")
+    p_backup_ep = sub.add_parser("backup-episode", help="backup episode file")
+    p_backup_ep.add_argument("file", help="episode file (e.g. ep003.md or 3)")
     sub.add_parser("next", help="next step")
     sub.add_parser("merge-episode", help="merge scenes into episode")
     sub.add_parser("scenes", help="list scenes with char counts")
@@ -235,6 +237,8 @@ def main(argv=None):
         run_action(pf, state, "context-update")
     elif args.command == "context-backup":
         handle_context_backup(pf, state)
+    elif args.command == "backup-episode":
+        handle_backup_episode(pf, args)
     elif args.command == "next":
         handle_next(pf, state)
     # v1.5: new commands
@@ -455,6 +459,27 @@ def handle_context_backup(pf, state):
         print(msg)
         print(display.ok("backup created: " + str(backup_path)))
     except FileExistsError as e:
+        print(display.error(str(e)))
+        sys.exit(1)
+
+
+def handle_backup_episode(pf, args):
+    """에피소드 파일 백업."""
+    import re
+    file_arg = args.file
+
+    # 숫자만 입력된 경우 ep###.md로 변환
+    if re.match(r'^\d+$', file_arg):
+        episode_file = f"ep{int(file_arg):03d}.md"
+    elif not file_arg.endswith('.md'):
+        episode_file = f"{file_arg}.md"
+    else:
+        episode_file = file_arg
+
+    try:
+        backup_path = pf.backup_episode(episode_file)
+        print(display.ok(f"백업 완료: {backup_path.name}"))
+    except FileNotFoundError as e:
         print(display.error(str(e)))
         sys.exit(1)
 
