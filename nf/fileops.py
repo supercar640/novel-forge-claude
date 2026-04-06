@@ -142,15 +142,14 @@ class ProjectFiles:
 
     @staticmethod
     def inject_char_count(content: str) -> str:
-        """첫 번째 # 제목 줄에 (분량: N자) 삽입. 이미 있으면 갱신."""
+        """기존 분량 표기가 있으면 제거하고 반환. (분량 표기 기능 비활성화)"""
         import re
         lines = content.split("\n")
         for i, line in enumerate(lines):
             if line.strip().startswith("#"):
                 # 기존 분량 표기 제거
                 clean = re.sub(r"\s*\(분량:\s*\d+자\)", "", line)
-                char_count = ProjectFiles.count_story_chars(content)
-                lines[i] = f"{clean} (분량: {char_count}자)"
+                lines[i] = clean
                 break
         return "\n".join(lines)
 
