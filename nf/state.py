@@ -100,6 +100,23 @@ def get_valid_actions(state: ProjectState) -> list[str]:
 
 def validate_action(state: ProjectState, action: str, **kwargs) -> str | None:
     """명령어 유효성 검증. 에러 메시지 반환, 유효하면 None."""
+    # v2.1: revise-episode는 거의 모든 단계에서 허용 (조건 충족 시)
+    if action == "revise-episode":
+        if state.episode_count == 0:
+            return "퇴고할 에피소드가 없습니다. (episode_count == 0)"
+        if state.revision_mode:
+            return "이미 퇴고 모드입니다."
+        # 항목 선택 중이거나 기획/집필 작업 중에는 제외
+        excluded_steps = [
+            Step.DIRECTION_DECISION.value,
+            Step.PLAN_BUILDUP.value,
+            Step.WRITING.value,
+            Step.PROOFREADING.value,
+        ]
+        if state.step in excluded_steps:
+            return f"현재 단계({state.step})에서는 퇴고를 시작할 수 없습니다. 작업을 완료한 후 시도하세요."
+        return None  # 허용
+
     valid = get_valid_actions(state)
     if action not in valid:
         return f"현재 단계({state.step})에서 '{action}' 명령을 사용할 수 없습니다. 가능한 명령: {', '.join(valid)}"
@@ -300,8 +317,23 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         return state, msg
 
     if action == "reject":
-        next_phase, next_step = TRANSITIONS[(state.phase, state.step, "reject")]
         old_step = state.step
+        # v2.1: revision_mode에서 reject → 원래 단계로 복귀
+        if state.revision_mode and old_step == Step.PROOFREAD_DECISION.value:
+            next_phase = state.revision_return_phase
+            next_step = state.revision_return_step
+            state.revision_mode = False
+            state.revision_episode = None
+            state.revision_return_phase = None
+            state.revision_return_step = None
+            state.draft_files = []
+            state.phase = next_phase
+            state.step = next_step
+            msg = display.ok("퇴고 취소. 원래 단계로 복귀")
+            msg += " " + display.transition(display.STEP_LABELS.get(state.step, state.step))
+            return state, msg
+
+        next_phase, next_step = TRANSITIONS[(state.phase, state.step, "reject")]
         state.phase = next_phase
         state.step = next_step
         state.revision_feedback = None
@@ -431,7 +463,7 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         msg += " " + display.transition(display.STEP_LABELS.get(state.step, state.step))
         return state, msg
 
-    # v1.7: revise-episode (과거 회차 재수정)
+    # v2.1: revise-episode (언제든 퇴고 모드 진입)
     if action == "revise-episode":
         filepath = kwargs.get("filepath", "")
         original_episode = kwargs.get("original_episode", "")
@@ -440,10 +472,10 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         state.revision_return_phase = state.phase
         state.revision_return_step = state.step
         state.draft_files = [filepath]
-        next_phase, next_step = TRANSITIONS[(state.phase, state.step, "revise-episode")]
-        state.phase = next_phase
-        state.step = next_step
-        msg = display.ok(f"에피소드 수정 모드: {original_episode}")
+        # 바로 퇴고 결정 단계로 이동 (AI가 퇴고본 작성 후 PD 검토)
+        state.phase = Phase.PHASE4.value
+        state.step = Step.PROOFREAD_DECISION.value
+        msg = display.ok(f"퇴고 모드 진입: {original_episode}")
         msg += " " + display.transition(display.STEP_LABELS.get(state.step, state.step))
         return state, msg
 
@@ -479,6 +511,21 @@ def execute_action(state: ProjectState, action: str, **kwargs) -> tuple[ProjectS
         # Scene mode: WRITING → SCENE_DECISION (episode mode이면 WRITING_DECISION 유지)
         if state.step == Step.WRITING.value and state.config.get("writing_mode") == "scene":
             next_step = Step.SCENE_DECISION.value
+
+        # v2.1: revision_mode에서 CONTEXT_UPDATE → 바로 원래 단계로 복귀
+        if state.step == Step.CONTEXT_UPDATE.value and state.revision_mode:
+            next_phase = state.revision_return_phase
+            next_step = state.revision_return_step
+            state.revision_mode = False
+            state.revision_episode = None
+            state.revision_return_phase = None
+            state.revision_return_step = None
+            state.draft_files = []
+            state.phase = next_phase
+            state.step = next_step
+            msg = display.ok("퇴고 완료. 원래 단계로 복귀")
+            msg += " " + display.transition(display.STEP_LABELS.get(state.step, state.step))
+            return state, msg
 
         # Phase 4 complete → Phase 2: 에피소드 카운트 증가, items 초기화
         if state.step == Step.COMPLETE.value:

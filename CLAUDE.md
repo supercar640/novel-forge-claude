@@ -143,7 +143,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 *switch-auto*: 집필 중 `python nf.py switch-auto`로 auto 전환 가능
 
-*과거 회차 재수정*: `python nf.py revise-episode ep001.md` (Phase 2 또는 complete 단계에서)
+*과거 회차 재수정*: `python nf.py revise-episode ep001.md` (대부분의 단계에서 가능, 아래 "언제든 퇴고" 참조)
 
 ---
 
@@ -164,6 +164,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Step 4-4 크기 점검**: 필요 시 `python nf.py context-backup` → 요약본 교체
 
 **Step 4-5 완료**: `python nf.py next` → episodes/에 저장 → Phase 2 복귀
+
+---
+
+### 언제든 퇴고 (v2.1)
+
+집필 도중 이전 회차를 수정해야 할 때, **Phase와 무관하게** 퇴고 모드에 진입할 수 있다.
+
+**사용자 트리거**: "3화 퇴고하자", "ep003 수정해줘" 등
+
+**퇴고 흐름**:
+1. `python nf.py revise-episode ep003.md` → 퇴고 모드 진입
+   - `drafts/revision_ep003.md` 생성 (원본 복사)
+   - 현재 Phase/Step 저장 후 Phase 4 `proofread_decision`으로 전이
+2. AI가 `drafts/revision_ep003.md`를 퇴고본으로 수정
+3. PD 검토: `[A]pprove / [M]odify / [D]ismiss`
+   - **A**: 승인 → `context_update` 단계
+   - **M**: 수정 요청 → `proofreading` 단계로 이동하여 재퇴고
+   - **D**: 폐기 → 원래 단계로 복귀 (변경 없음)
+4. 컨텍스트 갱신 후 `next` → `episodes/ep003.md` 덮어쓰기 + 원래 단계로 복귀
+
+**제약사항**: 다음 단계에서는 퇴고 진입 불가 (작업 완료 후 시도)
+- `direction_decision` (방향성 선택 중)
+- `plan_buildup` (기획안 작성 중)
+- `writing` (집필 중)
+- `proofreading` (퇴고 중)
 
 ---
 
@@ -222,7 +247,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `switch-auto` | auto 모드 전환 |
 | `merge-episode` | 장면 병합 (scene, 5,500자+) |
 | `scenes` | 장면 목록 표시 |
-| `revise-episode <file>` | 완성 에피소드 재수정 |
+| `revise-episode <file>` | v2.1: 언제든 퇴고 모드 진입 (episodes/ep###.md) |
 | `ai-config` | v2.0: AI 프로바이더 설정 표시 |
 | `ai-provider <type> -m <model> [--phase <phase>]` | v2.0: 프로바이더 설정 |
 | `ai-validate` | v2.0: 프로바이더 설정 검증 |
@@ -242,7 +267,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **유연한 진입**: 원고/컨텍스트 임포트로 Phase 1 단축 가능
 - **auto 전환**: 집필 중 언제든 switch-auto 가능
 - **shelve**: hold 항목은 shelve/ 자동 저장
-- **재수정**: revise-episode로 완성본 수정 (episode_count 불변)
+- **언제든 퇴고**: revise-episode로 언제든 퇴고 모드 진입 가능 (episode_count 불변)
 
 ## 프로젝트 디렉토리 구조
 

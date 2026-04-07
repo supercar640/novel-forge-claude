@@ -294,35 +294,45 @@ AI가 갱신 후 컨텍스트 전체 크기를 평가하여, AI 처리에 부담
 
 ---
 
-## 과거 회차 재수정 모드 (v1.7)
+## 언제든 퇴고 모드 (v2.1)
 
-이미 완성된 에피소드를 다시 수정할 수 있는 모드. `revise-episode <file>` 명령으로 진입한다.
+이미 완성된 에피소드를 언제든지 다시 수정할 수 있는 모드. `revise-episode <file>` 명령으로 진입한다.
 
 ### 진입 가능 단계
 
-| 진입 가능 단계 | Phase |
-|---------------|-------|
-| `development_proposal` | Phase 2 (전개 옵션 생성 단계) |
-| `complete` | Phase 4 (회차 완료 단계) |
+v2.1부터 **대부분의 단계에서 퇴고 모드 진입이 가능**하다. 단, 다음 단계에서는 진입 불가:
+
+| 진입 불가 단계 | 이유 |
+|---------------|------|
+| `direction_decision` | 방향성 선택 중 |
+| `plan_buildup` | 기획안 작성 중 |
+| `writing` | 집필 진행 중 |
+| `proofreading` | 퇴고 진행 중 |
+
+그 외 모든 단계에서 퇴고 모드 진입 가능 (단, episode_count > 0이어야 함).
 
 ### 워크플로우
 
 ```
 revise-episode <file>
-  → 해당 에피소드를 로드하여 writing_decision 단계로 진입
+  → drafts/revision_<file> 생성 (원본 복사)
+  → proofread_decision 단계로 직접 진입
+  → AI가 퇴고본 작성 (drafts/revision_<file> 수정)
   → PD 의사결정:
-    → modify "<피드백>" → AI가 피드백 반영하여 수정
-    → approve → Phase 4 (퇴고 → 컨텍스트 갱신) 진행
-  → 퇴고 완료 후 원본 에피소드 파일을 덮어쓰기 (overwrite)
+    → approve → context_update 단계로 이동
+    → revise "<피드백>" → proofreading 단계에서 재퇴고
+    → reject → 퇴고 취소, 원래 단계로 복귀 (변경 없음)
+  → 컨텍스트 갱신 후 next → 원본 에피소드 덮어쓰기
   → 원래 진입했던 단계로 복귀
 ```
 
 ### 핵심 규칙
 
 - **episode_count 불변**: 재수정은 기존 회차를 덮어쓰는 것이므로 episode_count가 증가하지 않음
-- **원본 덮어쓰기**: 퇴고 완료 시 수정된 원고가 원본 에피소드 파일(`episodes/` 내)을 직접 대체
+- **원본 덮어쓰기**: 컨텍스트 갱신 완료 후 수정된 원고가 원본 에피소드 파일(`episodes/` 내)을 직접 대체
 - **컨텍스트 갱신**: 수정된 내용에 따라 Phase 4 컨텍스트 갱신을 정상적으로 수행
-- **복귀**: 재수정 완료 후 원래 진입했던 단계(development_proposal 또는 complete)로 자동 복귀
+- **복귀**: 퇴고 완료 후 원래 진입했던 단계로 자동 복귀
+- **단순화된 흐름**: v2.1에서는 context_update → 바로 복귀 (context_size_check, complete 단계 생략)
 
 ---
 
@@ -421,7 +431,7 @@ projects/
 10. **인코딩 무결성**: UTF-8 인코딩 검증으로 컨텍스트 파일 손상 감지 (v1.5)
 11. **초안 중복 방지**: draft_files에 동일 파일 중복 등록 방지 (v1.5)
 12. **장면별 모드**: scene 모드에서 `scene_count`로 장면 수 추적, `merge-episode`로 수동 병합 (5,500자 게이트), `scenes`로 장면 목록 확인
-13. **과거 회차 재수정**: `revise-episode <file>`로 완성된 에피소드를 재수정 가능, episode_count 불변 (v1.7)
+13. **언제든 퇴고**: `revise-episode <file>`로 대부분의 단계에서 퇴고 모드 진입 가능, episode_count 불변 (v2.1)
 14. **보류 항목 보관**: 보류(Hold) 시 `shelve/` 디렉토리에 자동 저장하여 나중에 참조 가능 (v1.7)
 
 ---
@@ -453,4 +463,4 @@ projects/
 | `switch-auto` | 자동작성(auto) 모드로 전환 (v1.5) |
 | `merge-episode` | 장면들을 에피소드로 병합 (scene 모드, 5,500자 이상 필요) |
 | `scenes` | 장면 목록 및 글자 수 표시 (scene 모드) |
-| `revise-episode <file>` | 완성된 에피소드를 재수정 모드로 진입 (v1.7) |
+| `revise-episode <file>` | 언제든 퇴고 모드 진입 - 완성된 에피소드 재수정 (v2.1) |
