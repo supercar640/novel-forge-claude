@@ -108,10 +108,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Step 2-1 전개 옵션** (`development_proposal`):
 1. context/ 6개 + foreshadow.md 읽기 (최초 1회만)
-2. 5개 전개 옵션 생성 (확률 분포 규칙 준수)
-3. `python nf.py add "<text>전개</text><probability>0.XX</probability>" -p 0.XX` × 5
-4. `python nf.py next`
-5. 사용자에게 제시: `[S]elect <번호> (1개만) / [H]old / [D]iscard / [R]etry`
+2. **shelve/dev_*.md 파일 확인** → 보류된 전개가 있으면 읽기
+3. 5개 전개 옵션 생성 (확률 분포 규칙 준수)
+   - **보류된 전개 우선 포함**: shelve/에 보류된 전개가 있으면 해당 전개를 5개 중에 포함
+   - 보류 전개의 probability는 기존 값 유지, 필요시 텍스트 다듬기 가능
+   - 나머지 슬롯은 새로운 전개로 채움 (확률 분포 규칙 준수)
+4. `python nf.py add "<text>전개</text><probability>0.XX</probability>" -p 0.XX` × 5
+5. `python nf.py next`
+6. 사용자에게 제시: `[S]elect <번호> (1개만) / [H]old / [D]iscard / [R]etry`
 
 **Step 2-3 전개 확인** (`development_confirm`):
 - `[A]pprove` → Phase 3 / `[R]eject` → 전개 선정 복귀
