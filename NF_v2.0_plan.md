@@ -376,15 +376,67 @@ nf config auto-optimize
 
 ---
 
-## 9. 요약
+## 9. v2.1 패치: 언제든 퇴고 모드
 
-| 항목 | v1.7 (NFC) | v2.0 (NF) |
-|------|-----------|-----------|
-| 이름 | Novel Forge Claude | **Novel Factory** |
-| AI 의존 | Claude Code 전용 | 아무 LLM (OpenAI, Anthropic, Google, Ollama, etc.) |
-| AI 호출 | Claude Code가 직접 수행 | NF 오케스트레이터가 API 호출 |
-| Phase별 AI | 불가 (전부 같은 Claude) | Phase별 독립 모델 지정 가능 |
-| 프롬프트 | CLAUDE.md 단일 파일 | Phase별 분리된 프롬프트 템플릿 |
-| 실행 방식 | Claude Code 필수 | 독립 실행 (CLI/REPL) + Claude Code 호환 |
-| 컨텍스트 시스템 | 8개 md 파일 | 동일 (변경 없음) |
-| PD 의사결정 | 동일 | 동일 (핵심 철학 유지) |
+v2.1에서는 퇴고 워크플로우를 개선하여 **어느 단계에서든 이전 회차를 퇴고**할 수 있도록 변경했다.
+
+### 9.1 기존 제한 (v1.7~v2.0)
+
+```
+revise-episode는 다음 단계에서만 사용 가능:
+- development_proposal (Phase 2)
+- complete (Phase 4)
+```
+
+### 9.2 변경 사항 (v2.1)
+
+```
+revise-episode를 대부분의 단계에서 사용 가능:
+- 제외: direction_decision, plan_buildup, writing, proofreading
+- 조건: episode_count > 0, revision_mode가 아닐 때
+```
+
+### 9.3 새로운 퇴고 흐름
+
+```
+PD: "3화 퇴고하자"
+    ↓
+nf revise-episode ep003.md
+    ↓
+drafts/revision_ep003.md 생성 (원본 복사)
+    ↓
+Phase 4 proofread_decision으로 직접 진입
+    ↓
+AI가 퇴고본 작성
+    ↓
+PD 검토: [A]pprove / [M]odify / [D]ismiss
+    ↓
+승인 → context_update → next
+    ↓
+episodes/ep003.md 덮어쓰기 + 원래 단계로 복귀
+```
+
+### 9.4 구현 변경점
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `nf/state.py` | `validate_action`에서 revise-episode 특별 처리 |
+| `nf/state.py` | `execute_action`에서 동적 전이 (proofread_decision 직행) |
+| `nf/state.py` | revision_mode에서 reject 시 원래 단계 복귀 |
+| `nf/state.py` | revision_mode에서 context_update 후 바로 복귀 |
+
+---
+
+## 10. 요약
+
+| 항목 | v1.7 (NFC) | v2.0 (NF) | v2.1 |
+|------|-----------|-----------|------|
+| 이름 | Novel Forge Claude | **Novel Factory** | - |
+| AI 의존 | Claude Code 전용 | 아무 LLM | - |
+| AI 호출 | Claude Code가 직접 수행 | NF 오케스트레이터가 API 호출 | - |
+| Phase별 AI | 불가 | Phase별 독립 모델 지정 가능 | - |
+| 프롬프트 | CLAUDE.md 단일 파일 | Phase별 분리된 프롬프트 템플릿 | - |
+| 실행 방식 | Claude Code 필수 | 독립 실행 + Claude Code 호환 | - |
+| 컨텍스트 시스템 | 8개 md 파일 | 동일 | - |
+| PD 의사결정 | 동일 | 동일 | - |
+| **퇴고 진입** | 특정 단계만 | 특정 단계만 | **언제든 가능** |
