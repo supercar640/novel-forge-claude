@@ -98,7 +98,7 @@ class ProjectFiles:
         self.backup_dir = root / "backup"
 
     @classmethod
-    def create_project(cls, base_dir: Path, project_name: str, novel_title: str) -> ProjectFiles:
+    def create_project(cls, base_dir: Path, project_name: str, novel_title: str, work_type: str = "novel") -> ProjectFiles:
         """새 프로젝트 디렉토리 구조 생성."""
         root = base_dir / novel_title
         if root.exists():
@@ -112,7 +112,8 @@ class ProjectFiles:
         (root / "polishing").mkdir()
         (root / "shelve").mkdir()
 
-        state = ProjectState(project_name=project_name, novel_title=novel_title)
+        state = ProjectState(project_name=project_name, novel_title=novel_title, work_type=work_type)
+        state.config = ProjectState._migrate_config(state.config)
         pf = cls(root)
         pf.save_state(state)
         return pf

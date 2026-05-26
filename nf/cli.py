@@ -28,6 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--title", help="english dir name", default=None)
     p_init.add_argument("--name-file", default=None,
                         help="UTF-8 파일에서 프로젝트명을 읽음 (Windows 비ASCII 안전)")
+    p_init.add_argument("--type", dest="work_type", choices=["novel", "comic"], default="novel",
+                        help="작품 유형 (novel=웹소설, comic=만화 스토리보드)")
 
     sub.add_parser("status", help="show status")
     sub.add_parser("items", help="list items")
@@ -446,10 +448,12 @@ def handle_init(args):
     base_dir = Path.cwd() / "projects"
     base_dir.mkdir(exist_ok=True)
     try:
-        pf = ProjectFiles.create_project(base_dir, name, title)
+        pf = ProjectFiles.create_project(base_dir, name, title, work_type=getattr(args, "work_type", "novel"))
         from .taste import seed_profile
         seed_profile(pf.root)
         print(display.ok("project created: " + str(pf.root)))
+        if getattr(args, "work_type", "novel") == "comic":
+            print(display.step_msg("작품 유형: 만화 스토리보드 (산출물=페이지/컷 콘티)"))
         print(display.step_msg("Phase 1: direction proposal"))
         print("  use 'add' to add directions")
     except FileExistsError as e:
