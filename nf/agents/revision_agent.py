@@ -35,6 +35,27 @@ class RevisionAgent(PhaseAgent):
         response = self.execute(context, user_msg)
         return response.content
 
+    def copyedit(self, context: dict, manuscript: str) -> str:
+        """1차 퇴고 (라인 레벨): 맞춤법·오탈자·비문, 문장 다듬기, 설정 표기 오류.
+
+        서사 구조/전개는 바꾸지 않고 원형을 유지한다. 컨텍스트 차원의 정합성
+        검수는 후속 2차 퇴고(별도)에서 다룬다.
+        """
+        user_msg = (
+            f"## 원고 (초고)\n{manuscript}\n\n"
+            "위 초고를 **1차 퇴고**해 주세요. 라인 레벨 교정에 집중합니다.\n\n"
+            "## 검토 항목\n"
+            "- 맞춤법, 오탈자, 띄어쓰기\n"
+            "- 비문, 어색한 문장 다듬기 (가독성)\n"
+            "- 명백한 설정 표기 오류 (인명·지명·호칭의 표기 불일치)\n\n"
+            "## 제약\n"
+            "- 서사 구조와 전개는 바꾸지 마세요 (원형 유지).\n"
+            "- 새로운 사건·설정을 추가하지 마세요.\n"
+            "- 수정된 전체 원고를 그대로 출력하세요 (설명·코멘트 없이 본문만).\n"
+        )
+        response = self.execute(context, user_msg)
+        return response.content
+
     def suggest_context_updates(self, context: dict, manuscript: str) -> str:
         """에피소드 완성 후 컨텍스트 갱신 제안."""
         user_msg = (

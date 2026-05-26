@@ -65,7 +65,7 @@ def run_ensemble_developments(
             return {"idx": idx, "type": wtype, "ok": False, "error": err}
         agent = DevelopmentAgent(provider, prompts_dir=prompts_dir)
         try:
-            content = agent.propose_developments(context)
+            content = agent.propose_developments(context, ensemble=True)
         except Exception as e:  # noqa: BLE001
             return {"idx": idx, "type": wtype, "ok": False, "error": str(e)}
         return {"idx": idx, "type": wtype, "ok": True, "content": content}

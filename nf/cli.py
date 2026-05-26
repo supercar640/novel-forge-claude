@@ -114,6 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="쉼표구분 worker 타입 (기본: gemini-cli,codex-cli)",
     )
 
+    # v2.3: 집필 파이프라인 (Gemini 초고 → Codex 1차 퇴고 → Claude 2차)
+    p_pipe = sub.add_parser("draft-pipeline", help="v2.3: 릴레이 집필 (초고→1차퇴고 자동)")
+    p_pipe.add_argument("--draft", default=None, help="초고 worker 타입 (기본: gemini-cli)")
+    p_pipe.add_argument("--revise", default=None, help="1차 퇴고 worker 타입 (기본: codex-cli)")
+
     return parser
 
 
@@ -284,6 +289,8 @@ def main(argv=None):
         handle_ai_cost_reset(pf)
     elif args.command == "ensemble-dev":
         handle_ensemble_dev(pf, state, args)
+    elif args.command == "draft-pipeline":
+        handle_draft_pipeline(pf, state, args)
     else:
         parser.print_help()
 
@@ -755,3 +762,47 @@ def handle_ensemble_dev(pf, state, args):
     print("  2) Claude Code가 자체 전개안 배치를 추가로 생성합니다.")
     print("  3) source(gemini/codex/claude)별로 모아 PD에게 전체 제시합니다.")
     print("  4) PD 선택분을 'nf add'로 등록 → 'nf select'로 확정합니다.")
+
+
+def handle_draft_pipeline(pf, state, args):
+    """v2.3: 집필 파이프라인 — Gemini 초고 → Codex 1차 퇴고 자동 실행.
+
+    2차 퇴고(컨텍스트 정합성)와 최종 승인은 라이브 Claude Code 세션이 수행한다.
+    """
+    from .pipeline import run_draft_pipeline, DEFAULT_DRAFT_WORKER, DEFAULT_REVISE_WORKER
+
+    if not state.selected_developments:
+        print(display.error("선정된 전개가 없습니다. Phase 2에서 전개를 먼저 선정하세요."))
+        sys.exit(1)
+
+    draft_worker = {"type": args.draft.strip(), "model": "", "timeout": 900} if getattr(args, "draft", None) else None
+    revise_worker = {"type": args.revise.strip(), "model": "", "timeout": 600} if getattr(args, "revise", None) else None
+
+    d_name = (draft_worker or DEFAULT_DRAFT_WORKER)["type"]
+    r_name = (revise_worker or DEFAULT_REVISE_WORKER)["type"]
+    ep_num = state.episode_count + 1
+    print(f"집필 파이프라인 시작 (ep{ep_num:03d}): 초고={d_name} → 1차퇴고={r_name} ...")
+
+    result = run_draft_pipeline(pf.root, state, draft_worker=draft_worker, revise_worker=revise_worker)
+
+    print()
+    for s in result["stages"]:
+        if s["ok"]:
+            print(display.ok(f"{s['stage']} ({s['model']}): {s['chars']:,}자 → {s['path'].name}"))
+        else:
+            print(display.error(f"{s['stage']} ({s['model']}): 실패 — {s['error']}"))
+
+    making_rel = result["making_dir"].relative_to(pf.root)
+    if not result["ready_for_stage3"]:
+        print(display.error("초고/1차 퇴고가 완료되지 않았습니다. 위 오류를 확인하세요."))
+        sys.exit(1)
+
+    print()
+    print(f"히스토리: {making_rel}/ (전 단계 보존, 덮어쓰기 없음)")
+    print()
+    print("다음 단계 (2차 퇴고 + 승인, Claude Code):")
+    print(f"  1) {making_rel}/02_revise1_codex.md 를 읽습니다.")
+    print("  2) 컨텍스트 정합성(플롯/캐릭터/복선 충돌)을 검수하여")
+    print(f"     {making_rel}/03_revise2_claude.md 로 저장합니다.")
+    print("  3) PD에게 제시: [A]승인 / [M]수정 / [D]폐기")
+    print(f"  4) A → episodes/ep{ep_num:03d}.md 로 승격 후 컨텍스트 갱신(Phase 4)으로 진행")

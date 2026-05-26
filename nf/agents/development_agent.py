@@ -19,24 +19,40 @@ class DevelopmentAgent(PhaseAgent):
         template = _load_template(prompts_dir)
         super().__init__(provider, template, **kwargs)
 
-    def propose_developments(self, context: dict) -> str:
-        """컨텍스트 기반 전개 옵션 5개 생성.
+    def propose_developments(self, context: dict, *, ensemble: bool = False) -> str:
+        """컨텍스트 기반 전개 옵션 생성.
+
+        ensemble=False: 5개 (N2/M1/R2) — 단일 제안용.
+        ensemble=True:  3개 (N1/M1/R1) — 모델별 분담용 (여러 모델 합산해 큐레이션).
 
         반환 형식 (파싱 필요):
             [N] 옵션 1. <text>...</text><probability>0.XX</probability>
             ...
         """
-        user_msg = (
-            "현재 컨텍스트를 바탕으로 다음 회차의 전개 옵션 5개를 제안해 주세요.\n\n"
-            "## 확률 분포 규칙\n"
-            "- [N]ormal 2개: probability > 0.30 (자연스러운 전개)\n"
-            "- [M]oderate 1개: probability 0.10~0.30 (약간 의외)\n"
-            "- [R]are 2개: probability < 0.10 (독창적, 맥락 부합 필수)\n\n"
-            "## 출력 형식\n"
-            "[N/M/R] 옵션 N.\n"
-            "<text>방향성 요약</text>\n"
-            "<probability>0.XX</probability>\n"
-        )
+        if ensemble:
+            user_msg = (
+                "현재 컨텍스트를 바탕으로 다음 회차의 전개 옵션 3개를 제안해 주세요.\n\n"
+                "## 확률 분포 규칙 (각 분류 1개씩, 총 3개)\n"
+                "- [N]ormal 1개: probability > 0.30 (자연스러운 전개)\n"
+                "- [M]oderate 1개: probability 0.10~0.30 (약간 의외)\n"
+                "- [R]are 1개: probability < 0.10 (독창적, 맥락 부합 필수)\n\n"
+                "## 출력 형식\n"
+                "[N/M/R] 옵션 N.\n"
+                "<text>방향성 요약</text>\n"
+                "<probability>0.XX</probability>\n"
+            )
+        else:
+            user_msg = (
+                "현재 컨텍스트를 바탕으로 다음 회차의 전개 옵션 5개를 제안해 주세요.\n\n"
+                "## 확률 분포 규칙\n"
+                "- [N]ormal 2개: probability > 0.30 (자연스러운 전개)\n"
+                "- [M]oderate 1개: probability 0.10~0.30 (약간 의외)\n"
+                "- [R]are 2개: probability < 0.10 (독창적, 맥락 부합 필수)\n\n"
+                "## 출력 형식\n"
+                "[N/M/R] 옵션 N.\n"
+                "<text>방향성 요약</text>\n"
+                "<probability>0.XX</probability>\n"
+            )
         response = self.execute(context, user_msg)
         return response.content
 

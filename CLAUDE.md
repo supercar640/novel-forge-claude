@@ -115,7 +115,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. 사용자에게 제시: `[S]elect <번호> (1개만) / [H]old / [D]iscard / [R]etry`
 
 **Step 2-1 앙상블 모드 (v2.2, 선택)** — 여러 AI를 동원해 다양성 확보:
-1. `python nf.py ensemble-dev` → 외부 CLI worker(기본 gemini-cli, codex-cli)가 **병렬**로 각각 전개안 5개 생성 → `drafts/ensemble_dev_*.md`에 저장
+1. `python nf.py ensemble-dev` → 외부 CLI worker(기본 gemini-cli, codex-cli)가 **병렬**로 각각 전개안 3개(N1/M1/R1) 생성 → `drafts/ensemble_dev_*.md`에 저장
    - worker 지정: `ensemble-dev --workers gemini-cli,codex-cli,claude-cli`
 2. Claude Code가 각 `drafts/ensemble_dev_*.md`를 읽고, **자체 전개안 배치도 추가 생성**
 3. source(gemini/codex/claude)별로 모아 PD에게 **전체 제시** (어느 AI 안인지 태그)
@@ -149,6 +149,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 *Auto 모드*: AI 내부 3화 자율 연쓰기 (전개생성→선택→집필→퇴고 반복)
 - 3화 완성 후 `save manuscript` × 3 → `next` → PD 검토
 - 선택 이력 테이블 첨부
+
+*파이프라인 모드 (v2.3)*: 역할 분담형 릴레이 집필
+1. `python nf.py draft-pipeline` → **자동**으로 2단계 실행:
+   - 초고: **Gemini** — 전개+컨텍스트 기반 막 갈김(분량·기세 우선) → `episodes/ep###_making/01_draft_gemini.md`
+   - 1차 퇴고: **Codex** — 맞춤법·오탈자·비문·설정 표기 오류 (라인 레벨) → `02_revise1_codex.md`
+2. **2차 퇴고 + 승인은 Claude Code(라이브)**:
+   - `02_revise1_codex.md` 읽기 → 컨텍스트 정합성(플롯/캐릭터/복선 충돌) 검수 → `03_revise2_claude.md` 저장
+   - PD 제시: `[A]승인 / [M]수정 / [D]폐기` (M 시 `03_..._r2.md`로 버전 적층, 덮어쓰기 없음)
+   - A → `episodes/ep###.md`로 승격 → Phase 4 컨텍스트 갱신
+- 회차 번호는 `episode_count+1` 자동 (`ep001_making`, `ep002_making` …)
+- 모든 단계가 `ep###_making/`에 **새 파일로 보존**되어 제작 히스토리가 남음
+- worker 교체: `draft-pipeline --draft <type> --revise <type>`
 
 *switch-auto*: 집필 중 `python nf.py switch-auto`로 auto 전환 가능
 
@@ -263,6 +275,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `ai-mode` | v2.0: standalone/passthrough 모드 확인 |
 | `ai-cost` | v2.0: 토큰 사용량 요약 |
 | `ensemble-dev [--workers <list>]` | v2.2: Phase 2 앙상블 전개안 (외부 CLI 병렬, 기본 gemini-cli,codex-cli) |
+| `draft-pipeline [--draft <t>] [--revise <t>]` | v2.3: 릴레이 집필 (Gemini 초고→Codex 1차퇴고 자동, 2차는 Claude) |
 
 ---
 
