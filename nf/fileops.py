@@ -98,7 +98,7 @@ class ProjectFiles:
         self.backup_dir = root / "backup"
 
     @classmethod
-    def create_project(cls, base_dir: Path, project_name: str, novel_title: str) -> ProjectFiles:
+    def create_project(cls, base_dir: Path, project_name: str, novel_title: str, work_type: str = "novel") -> ProjectFiles:
         """새 프로젝트 디렉토리 구조 생성."""
         root = base_dir / novel_title
         if root.exists():
@@ -112,7 +112,8 @@ class ProjectFiles:
         (root / "polishing").mkdir()
         (root / "shelve").mkdir()
 
-        state = ProjectState(project_name=project_name, novel_title=novel_title)
+        state = ProjectState(project_name=project_name, novel_title=novel_title, work_type=work_type)
+        state.config = ProjectState._migrate_config(state.config)
         pf = cls(root)
         pf.save_state(state)
         return pf
@@ -276,6 +277,18 @@ class ProjectFiles:
             body_lines.append(line)
         body = "\n".join(body_lines)
         return len(body)
+
+    @staticmethod
+    def count_pages(text: str) -> int:
+        """만화 스토리보드의 페이지 수 집계 ('## P' 헤딩)."""
+        import re
+        return len(re.findall(r"(?m)^##\s+P\d+", text))
+
+    @staticmethod
+    def count_cuts(text: str) -> int:
+        """만화 스토리보드의 총 컷 수 집계 ('### Cut' 헤딩)."""
+        import re
+        return len(re.findall(r"(?m)^###\s+Cut\s+\d+", text))
 
     @staticmethod
     def validate_encoding(filepath: Path) -> bool:

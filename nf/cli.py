@@ -28,6 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--title", help="english dir name", default=None)
     p_init.add_argument("--name-file", default=None,
                         help="UTF-8 파일에서 프로젝트명을 읽음 (Windows 비ASCII 안전)")
+    p_init.add_argument("--type", dest="work_type", choices=["novel", "comic"], default="novel",
+                        help="작품 유형 (novel=웹소설, comic=만화 스토리보드)")
 
     sub.add_parser("status", help="show status")
     sub.add_parser("items", help="list items")
@@ -171,9 +173,22 @@ def check_draft_length(pf, state):
     """writing_decision 단계에서 approve 시 draft 분량 검증."""
     if state.step != Step.WRITING_DECISION.value:
         return None
-    if not state.config.get("webnovel", True):
-        return None
     if not state.draft_files:
+        return None
+    if state.work_type == "comic":
+        target = state.config.get("comic_pages_per_episode", 18)
+        for df in state.draft_files:
+            draft_path = pf.root / df
+            if not draft_path.exists():
+                continue
+            pages = ProjectFiles.count_pages(draft_path.read_text(encoding="utf-8"))
+            if pages < target:
+                return (
+                    f"원고 분량 미달: {df} ({pages}/{target}페이지). "
+                    f"{target - pages}페이지 추가 필요."
+                )
+        return None
+    if not state.config.get("webnovel", True):
         return None
     for df in state.draft_files:
         draft_path = pf.root / df
@@ -446,10 +461,12 @@ def handle_init(args):
     base_dir = Path.cwd() / "projects"
     base_dir.mkdir(exist_ok=True)
     try:
-        pf = ProjectFiles.create_project(base_dir, name, title)
+        pf = ProjectFiles.create_project(base_dir, name, title, work_type=getattr(args, "work_type", "novel"))
         from .taste import seed_profile
         seed_profile(pf.root)
         print(display.ok("project created: " + str(pf.root)))
+        if getattr(args, "work_type", "novel") == "comic":
+            print(display.step_msg("작품 유형: 만화 스토리보드 (산출물=페이지/컷 콘티)"))
         print(display.step_msg("Phase 1: direction proposal"))
         print("  use 'add' to add directions")
     except FileExistsError as e:
@@ -651,7 +668,16 @@ def handle_merge_episode(pf, state):
         sf_path = pf.root / sf
         if sf_path.exists():
             total_chars += ProjectFiles.count_story_chars(sf_path.read_text(encoding="utf-8"))
-    if state.config.get("webnovel", True) and total_chars < MIN_STORY_CHARS:
+    if state.work_type == "comic":
+        total_pages = sum(
+            ProjectFiles.count_pages((pf.root / sf).read_text(encoding="utf-8"))
+            for sf in scene_files if (pf.root / sf).exists()
+        )
+        target = state.config.get("comic_pages_per_episode", 18)
+        if total_pages < target:
+            print(display.error(f"병합 불가: 누적 {total_pages}/{target}페이지. {target - total_pages}페이지 부족."))
+            sys.exit(1)
+    elif state.config.get("webnovel", True) and total_chars < MIN_STORY_CHARS:
         print(display.error(
             f"병합 불가: 누적 {total_chars:,}자 / 최소 {MIN_STORY_CHARS:,}자. "
             f"{MIN_STORY_CHARS - total_chars:,}자 추가 필요. 장면을 더 작성하세요."
@@ -664,11 +690,17 @@ def handle_merge_episode(pf, state):
     print(msg)
     # 병합 결과 글자 수 표시
     text = merged_path.read_text(encoding="utf-8")
-    char_count = ProjectFiles.count_story_chars(text)
-    if state.config.get("webnovel", True):
-        print(display.ok(f"병합 결과: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자)"))
+    if state.work_type == "comic":
+        pages = ProjectFiles.count_pages(text)
+        cuts = ProjectFiles.count_cuts(text)
+        target = state.config.get("comic_pages_per_episode", 18)
+        print(display.ok(f"병합 결과: {pages}/{target}페이지 (총 {cuts}컷)"))
     else:
-        print(display.ok(f"병합 결과: {char_count:,}자"))
+        char_count = ProjectFiles.count_story_chars(text)
+        if state.config.get("webnovel", True):
+            print(display.ok(f"병합 결과: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자)"))
+        else:
+            print(display.ok(f"병합 결과: {char_count:,}자"))
 
 
 def handle_revise_episode(pf, state, args):
@@ -700,6 +732,15 @@ def handle_char_count(pf, state, args):
         print(display.error(f"파일을 찾을 수 없습니다: {args.file}"))
         sys.exit(1)
     text = filepath.read_text(encoding="utf-8")
+    if state.work_type == "comic":
+        pages = ProjectFiles.count_pages(text)
+        cuts = ProjectFiles.count_cuts(text)
+        target = state.config.get("comic_pages_per_episode", 18)
+        if pages >= target:
+            print(display.ok(f"{filepath.name}: {pages}/{target}페이지 (총 {cuts}컷, 기준 충족)"))
+        else:
+            print(display.error(f"{filepath.name}: {pages}/{target}페이지 (총 {cuts}컷, {target - pages}페이지 부족)"))
+        return
     char_count = ProjectFiles.count_story_chars(text)
     webnovel = state.config.get("webnovel", True)
     if webnovel:

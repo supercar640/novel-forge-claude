@@ -76,6 +76,16 @@ python nf.py status --project my-novel
 python nf.py -P my-novel status
 ```
 
+## 작품 유형 (v2.8)
+
+`init --type {novel,comic}`로 작품 유형을 정한다. `comic`은 소설과 동일한 4-Phase 흐름을 타되 산출물이 **출판만화형 스토리보드**(페이지/컷 콘티)다. 분량 기준은 글자 수 대신 페이지 수(`comic_pages_per_episode`, 기본 18p).
+
+```bash
+python nf.py init "내 만화" --title my-comic --type comic
+```
+
+스토리보드 포맷: 페이지 `## P{n}`, 컷 `### Cut {n}`, 각 컷 5필드(구도/카메라·연출·나레이션·대사·SFX). 상세는 `nf/prompts/phase3_writing_comic.md` 참조.
+
 ## 워크플로우
 
 ```
@@ -132,7 +142,7 @@ python nf.py <command>
 
 | 명령어 | 단축키 | 설명 |
 |--------|--------|------|
-| `init <name> [--title <dir>]` | — | 새 프로젝트 생성 |
+| `init <name> [--title <dir>] [--type novel\|comic]` | — | 새 프로젝트 생성 (comic=만화 스토리보드) |
 | `status` | — | 현재 상태 표시 |
 | `items` | — | 제안 항목 목록 |
 | `add "<text>" [-p 0.XX]` | — | 항목 추가 |

@@ -153,7 +153,18 @@ def format_scenes(pf, state: ProjectState) -> str:
         else:
             lines.append(f"  {i}. {Path(sf).name} (없음)")
 
-    if state.config.get("webnovel", True):
+    if state.work_type == "comic":
+        total_pages = sum(
+            ProjectFiles.count_pages((pf.root / sf).read_text(encoding="utf-8"))
+            for sf in scene_files if (pf.root / sf).exists()
+        )
+        total_cuts = sum(
+            ProjectFiles.count_cuts((pf.root / sf).read_text(encoding="utf-8"))
+            for sf in scene_files if (pf.root / sf).exists()
+        )
+        target = state.config.get("comic_pages_per_episode", 18)
+        lines.append(f"  누적: {total_pages}/{target}페이지 (총 {total_cuts}컷)")
+    elif state.config.get("webnovel", True):
         lines.append(f"  누적: {total_chars:,}/5,500자")
     else:
         lines.append(f"  누적: {total_chars:,}자")

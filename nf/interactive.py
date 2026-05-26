@@ -238,7 +238,19 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
             sf_path = pf.root / sf
             if sf_path.exists():
                 total_chars += _PF.count_story_chars(sf_path.read_text(encoding="utf-8"))
-        if state.config.get("webnovel", True) and total_chars < 5500:
+        if state.work_type == "comic":
+            total_pages = sum(
+                _PF.count_pages((pf.root / sf).read_text(encoding="utf-8"))
+                for sf in scene_files if (pf.root / sf).exists()
+            )
+            target = state.config.get("comic_pages_per_episode", 18)
+            if total_pages < target:
+                print(display.error(
+                    f"병합 불가: 누적 {total_pages}/{target}페이지. "
+                    f"{target - total_pages}페이지 추가 필요. 장면을 더 작성하세요."
+                ))
+                return state
+        elif state.config.get("webnovel", True) and total_chars < 5500:
             print(display.error(
                 f"병합 불가: 누적 {total_chars:,}자 / 최소 5,500자. "
                 f"{5500 - total_chars:,}자 추가 필요. 장면을 더 작성하세요."
@@ -251,11 +263,17 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
         print(msg)
         # 병합 결과 글자 수 표시
         text = merged_path.read_text(encoding="utf-8")
-        char_count = _PF.count_story_chars(text)
-        if state.config.get("webnovel", True):
-            print(display.ok(f"병합 결과: {char_count:,}자 (기준: 5,500자)"))
+        if state.work_type == "comic":
+            pages = _PF.count_pages(text)
+            cuts = _PF.count_cuts(text)
+            target = state.config.get("comic_pages_per_episode", 18)
+            print(display.ok(f"병합 결과: {pages}/{target}페이지 (총 {cuts}컷)"))
         else:
-            print(display.ok(f"병합 결과: {char_count:,}자"))
+            char_count = _PF.count_story_chars(text)
+            if state.config.get("webnovel", True):
+                print(display.ok(f"병합 결과: {char_count:,}자 (기준: 5,500자)"))
+            else:
+                print(display.ok(f"병합 결과: {char_count:,}자"))
         return state
 
     # context-backup needs special handling (file backup + state update)

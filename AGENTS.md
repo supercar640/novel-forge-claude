@@ -85,6 +85,10 @@ nf/
 
 새 프로바이더는 `nf/providers/base.py`(또는 CLI 계열은 `cli_base.py`)를 상속하고 `nf/providers/__init__.py`에 등록한다.
 
+### work_type 분기 (소설/만화)
+
+`ProjectState.work_type`("novel"|"comic")이 산출물 종류를 가른다. 분량 집계/표시/게이트, 집필 프롬프트, `tone.md` 시드 3축에서만 분기하고 상태머신·전이는 공유한다. 분량 분기는 `work_type=="comic"`을 먼저 확인하고, 아니면 기존 `webnovel` 글자 로직으로 폴백한다. 페이지/컷 집계는 `ProjectFiles.count_pages` / `count_cuts`를 쓴다.
+
 ---
 
 ## 코딩 컨벤션
