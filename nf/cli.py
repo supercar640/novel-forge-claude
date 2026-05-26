@@ -173,9 +173,22 @@ def check_draft_length(pf, state):
     """writing_decision 단계에서 approve 시 draft 분량 검증."""
     if state.step != Step.WRITING_DECISION.value:
         return None
-    if not state.config.get("webnovel", True):
-        return None
     if not state.draft_files:
+        return None
+    if state.work_type == "comic":
+        target = state.config.get("comic_pages_per_episode", 18)
+        for df in state.draft_files:
+            draft_path = pf.root / df
+            if not draft_path.exists():
+                continue
+            pages = ProjectFiles.count_pages(draft_path.read_text(encoding="utf-8"))
+            if pages < target:
+                return (
+                    f"원고 분량 미달: {df} ({pages}/{target}페이지). "
+                    f"{target - pages}페이지 추가 필요."
+                )
+        return None
+    if not state.config.get("webnovel", True):
         return None
     for df in state.draft_files:
         draft_path = pf.root / df
