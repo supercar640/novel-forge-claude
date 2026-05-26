@@ -655,7 +655,16 @@ def handle_merge_episode(pf, state):
         sf_path = pf.root / sf
         if sf_path.exists():
             total_chars += ProjectFiles.count_story_chars(sf_path.read_text(encoding="utf-8"))
-    if state.config.get("webnovel", True) and total_chars < MIN_STORY_CHARS:
+    if state.work_type == "comic":
+        total_pages = sum(
+            ProjectFiles.count_pages((pf.root / sf).read_text(encoding="utf-8"))
+            for sf in scene_files if (pf.root / sf).exists()
+        )
+        target = state.config.get("comic_pages_per_episode", 18)
+        if total_pages < target:
+            print(display.error(f"병합 불가: 누적 {total_pages}/{target}페이지. {target - total_pages}페이지 부족."))
+            sys.exit(1)
+    elif state.config.get("webnovel", True) and total_chars < MIN_STORY_CHARS:
         print(display.error(
             f"병합 불가: 누적 {total_chars:,}자 / 최소 {MIN_STORY_CHARS:,}자. "
             f"{MIN_STORY_CHARS - total_chars:,}자 추가 필요. 장면을 더 작성하세요."
@@ -668,11 +677,17 @@ def handle_merge_episode(pf, state):
     print(msg)
     # 병합 결과 글자 수 표시
     text = merged_path.read_text(encoding="utf-8")
-    char_count = ProjectFiles.count_story_chars(text)
-    if state.config.get("webnovel", True):
-        print(display.ok(f"병합 결과: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자)"))
+    if state.work_type == "comic":
+        pages = ProjectFiles.count_pages(text)
+        cuts = ProjectFiles.count_cuts(text)
+        target = state.config.get("comic_pages_per_episode", 18)
+        print(display.ok(f"병합 결과: {pages}/{target}페이지 (총 {cuts}컷)"))
     else:
-        print(display.ok(f"병합 결과: {char_count:,}자"))
+        char_count = ProjectFiles.count_story_chars(text)
+        if state.config.get("webnovel", True):
+            print(display.ok(f"병합 결과: {char_count:,}자 (기준: {MIN_STORY_CHARS:,}자)"))
+        else:
+            print(display.ok(f"병합 결과: {char_count:,}자"))
 
 
 def handle_revise_episode(pf, state, args):
@@ -704,6 +719,15 @@ def handle_char_count(pf, state, args):
         print(display.error(f"파일을 찾을 수 없습니다: {args.file}"))
         sys.exit(1)
     text = filepath.read_text(encoding="utf-8")
+    if state.work_type == "comic":
+        pages = ProjectFiles.count_pages(text)
+        cuts = ProjectFiles.count_cuts(text)
+        target = state.config.get("comic_pages_per_episode", 18)
+        if pages >= target:
+            print(display.ok(f"{filepath.name}: {pages}/{target}페이지 (총 {cuts}컷, 기준 충족)"))
+        else:
+            print(display.error(f"{filepath.name}: {pages}/{target}페이지 (총 {cuts}컷, {target - pages}페이지 부족)"))
+        return
     char_count = ProjectFiles.count_story_chars(text)
     webnovel = state.config.get("webnovel", True)
     if webnovel:
