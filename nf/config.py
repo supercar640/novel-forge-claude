@@ -137,9 +137,24 @@ def create_provider(provider_config: dict) -> AIProvider:
             base_url=provider_config.get("base_url", ""),
         )
 
+    # v2.2: CLI 기반 프로바이더 (외부 에이전트 CLI를 subprocess로 호출)
+    timeout = provider_config.get("timeout")
+    if provider_type in ("gemini-cli", "gemini_cli"):
+        from .providers.gemini_cli_provider import GeminiCLIProvider
+        return GeminiCLIProvider(model=model, timeout=timeout)
+
+    if provider_type in ("codex-cli", "codex_cli"):
+        from .providers.codex_cli_provider import CodexCLIProvider
+        return CodexCLIProvider(model=model, timeout=timeout)
+
+    if provider_type in ("claude-cli", "claude_cli"):
+        from .providers.claude_cli_provider import ClaudeCLIProvider
+        return ClaudeCLIProvider(model=model, timeout=timeout)
+
     raise ValueError(
         f"Unknown provider type: {provider_type}. "
-        "Supported: anthropic, openai, google, openrouter, ollama, custom"
+        "Supported: anthropic, openai, google, openrouter, ollama, custom, "
+        "gemini-cli, codex-cli, claude-cli"
     )
 
 

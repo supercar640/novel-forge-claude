@@ -157,6 +157,14 @@ python nf.py <command>
 | `ai-cost` | 토큰 사용량 요약 |
 | `ai-cost-reset` | 비용 추적 로그 초기화 |
 
+### v2.2 앙상블 명령
+
+| 명령어 | 설명 |
+|--------|------|
+| `ensemble-dev [--workers <list>]` | Phase 2 전개안을 여러 CLI worker로 병렬 생성 (기본 `gemini-cli,codex-cli`) → `drafts/ensemble_dev_*.md` |
+
+여러 AI를 동원해 전개안 다양성을 확보하는 **하이브리드 앙상블**. NF가 외부 CLI(gemini, codex 등)를 병렬 실행해 후보를 모으면, Claude Code가 자체 배치를 더해 source별로 PD에게 전체 제시하고, PD가 최종 선택한다.
+
 ### 지원 프로바이더
 
 | 타입 | 모델 예시 | API 키 환경변수 |
@@ -167,6 +175,11 @@ python nf.py <command>
 | `openrouter` | anthropic/claude-sonnet-4, etc. | `OPENROUTER_API_KEY` |
 | `ollama` | llama3.1, mistral, etc. | (불필요) |
 | `custom` | 임의 모델 (OpenAI 호환 API) | 사용자 지정 |
+| `gemini-cli` | (CLI 기본 모델 또는 `-m`) | (CLI 로그인) |
+| `codex-cli` | (CLI 기본 모델 또는 `-c model=`) | (CLI 로그인) |
+| `claude-cli` | (CLI 기본 모델 또는 `--model`) | (CLI 로그인) |
+
+> **v2.2 CLI 프로바이더**: HTTP API 대신 로컬에 설치된 에이전트 CLI(`gemini`, `codex`, `claude`)를 subprocess로 호출한다. API 키 대신 각 CLI의 로그인 세션을 사용한다. Phase 2 앙상블(`ensemble-dev`)의 worker로 활용된다.
 
 ## 프로젝트 구조
 

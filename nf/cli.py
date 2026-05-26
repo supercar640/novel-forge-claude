@@ -23,8 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", help="command")
 
     p_init = sub.add_parser("init", help="new project")
-    p_init.add_argument("name", help="project name")
+    p_init.add_argument("name", nargs="?", default=None,
+                        help="project name (ASCII ok; 한글은 --name-file 권장)")
     p_init.add_argument("--title", help="english dir name", default=None)
+    p_init.add_argument("--name-file", default=None,
+                        help="UTF-8 파일에서 프로젝트명을 읽음 (Windows 비ASCII 안전)")
 
     sub.add_parser("status", help="show status")
     sub.add_parser("items", help="list items")
@@ -102,6 +105,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ai-mode", help="v2.0: show/toggle standalone vs passthrough mode")
     sub.add_parser("ai-cost", help="v2.0: show token usage and cost summary")
     sub.add_parser("ai-cost-reset", help="v2.0: reset cost tracking log")
+
+    # v2.2: Phase 2 앙상블 (외부 CLI worker 병렬)
+    p_ens = sub.add_parser("ensemble-dev", help="v2.2: Phase 2 앙상블 전개안 (외부 CLI 병렬)")
+    p_ens.add_argument(
+        "--workers",
+        default=None,
+        help="쉼표구분 worker 타입 (기본: gemini-cli,codex-cli)",
+    )
 
     return parser
 
@@ -271,6 +282,8 @@ def main(argv=None):
         handle_ai_cost(pf)
     elif args.command == "ai-cost-reset":
         handle_ai_cost_reset(pf)
+    elif args.command == "ensemble-dev":
+        handle_ensemble_dev(pf, state, args)
     else:
         parser.print_help()
 
@@ -349,7 +362,25 @@ def _save_imported_episode(pf, state, import_file_path):
 
 
 def handle_init(args):
+    # Windows 셸(PowerShell 5.1/git-bash)은 비ASCII argv를 코드페이지로 손실시킨다.
+    # 한글 프로젝트명은 --name-file(UTF-8)로 전달해야 안전하다.
     name = args.name
+    name_file = getattr(args, "name_file", None)
+    if name_file:
+        nf_path = Path(name_file)
+        if not nf_path.exists():
+            print(display.error(f"--name-file 경로를 찾을 수 없습니다: {name_file}"))
+            sys.exit(1)
+        name = nf_path.read_text(encoding="utf-8").strip()
+    if not name:
+        print(display.error("프로젝트명이 필요합니다. (name 인자 또는 --name-file)"))
+        sys.exit(1)
+    if "�" in name:
+        print(display.error(
+            "프로젝트명에 깨진 문자(U+FFFD)가 있습니다. "
+            "한글 이름은 셸 인자 대신 --name-file <UTF-8 파일>로 전달하세요."
+        ))
+        sys.exit(1)
     title = args.title
     if title is None:
         import re
@@ -682,3 +713,45 @@ def handle_ai_cost_reset(pf):
     tracker = CostTracker(pf.root)
     tracker.reset()
     print(display.ok("비용 추적 로그가 초기화되었습니다."))
+
+
+def handle_ensemble_dev(pf, state, args):
+    """v2.2: Phase 2 앙상블 — 외부 CLI worker를 병렬 실행해 전개안 후보를 drafts/에 생성.
+
+    하이브리드 모드: NF는 fan-out과 파일 저장만 담당하고, 자기 배치 추가·최종
+    큐레이션은 라이브 Claude Code 세션이 PD와 함께 수행한다.
+    """
+    from .ensemble import run_ensemble_developments, DEFAULT_WORKERS
+
+    if state.phase != Phase.PHASE2.value:
+        print(display.error(f"앙상블 전개안은 Phase 2에서만 사용합니다 (현재 {state.phase})."))
+        sys.exit(1)
+
+    workers = None
+    if getattr(args, "workers", None):
+        workers = [{"type": t.strip(), "model": ""} for t in args.workers.split(",") if t.strip()]
+    used = workers or DEFAULT_WORKERS
+    names = ", ".join(w["type"] for w in used)
+    print(f"앙상블 전개안 생성 중 (병렬): {names} ...")
+
+    results = run_ensemble_developments(pf.root, state, workers=workers)
+
+    print()
+    any_ok = False
+    for r in results:
+        if r["ok"]:
+            any_ok = True
+            print(display.ok(f"{r['type']}: 전개안 {r['options']}개 / {r['chars']:,}자 → {r['path'].name}"))
+        else:
+            print(display.error(f"{r['type']}: 실패 — {r['error']}"))
+
+    if not any_ok:
+        print(display.error("모든 worker가 실패했습니다. CLI 설치/로그인 상태를 확인하세요."))
+        sys.exit(1)
+
+    print()
+    print("다음 단계 (하이브리드 큐레이션):")
+    print("  1) drafts/ensemble_dev_*.md 를 읽습니다.")
+    print("  2) Claude Code가 자체 전개안 배치를 추가로 생성합니다.")
+    print("  3) source(gemini/codex/claude)별로 모아 PD에게 전체 제시합니다.")
+    print("  4) PD 선택분을 'nf add'로 등록 → 'nf select'로 확정합니다.")

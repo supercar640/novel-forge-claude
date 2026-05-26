@@ -59,7 +59,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 사용자가 소설 관련 요청을 하면 **반드시 먼저 신규/계속 여부를 확인**한다.
 
-- **"새 소설 시작하자"** → 신규 작성: 장르/키워드 질문 → `python nf.py init "<프로젝트명>" --title <디렉토리명>` → Phase 1
+- **"새 소설 시작하자"** → 신규 작성: 장르/키워드 질문 → **한글 프로젝트명은 Write 도구로 UTF-8 파일(예: `projects/.initname.txt`)에 저장 후** `python nf.py init --title <디렉토리명> --name-file projects/.initname.txt` → 임시 파일 삭제 → Phase 1
+  - 이유: Windows 셸(PowerShell 5.1/git-bash)이 비ASCII argv를 손실시키므로 한글명은 `--name-file` 필수. ASCII명이면 `init "<name>" --title <dir>`도 가능.
 - **"이어서 쓰자"** → Glob `projects/*/state.json` → 프로젝트 선택 → `python nf.py status` → context/ 읽기 → 해당 단계 이어서 진행
 - **원고 임포트** → 프로젝트 생성 → `python nf.py import-manuscript "<file>"` → Step 1-6
 - **컨텍스트 임포트** → 프로젝트 생성 → `python nf.py import-context` → Phase 2 직행
@@ -112,6 +113,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. `python nf.py add "<text>전개</text><probability>0.XX</probability>" -p 0.XX` × 5
 4. `python nf.py next`
 5. 사용자에게 제시: `[S]elect <번호> (1개만) / [H]old / [D]iscard / [R]etry`
+
+**Step 2-1 앙상블 모드 (v2.2, 선택)** — 여러 AI를 동원해 다양성 확보:
+1. `python nf.py ensemble-dev` → 외부 CLI worker(기본 gemini-cli, codex-cli)가 **병렬**로 각각 전개안 5개 생성 → `drafts/ensemble_dev_*.md`에 저장
+   - worker 지정: `ensemble-dev --workers gemini-cli,codex-cli,claude-cli`
+2. Claude Code가 각 `drafts/ensemble_dev_*.md`를 읽고, **자체 전개안 배치도 추가 생성**
+3. source(gemini/codex/claude)별로 모아 PD에게 **전체 제시** (어느 AI 안인지 태그)
+4. PD가 고른 전개안만 `add`로 등록 → `select`로 확정 (이후 흐름은 동일)
+   - 하이브리드 원칙: NF는 fan-out·저장만, 자기 배치·큐레이션은 Claude Code가 PD와 함께
 
 **Step 2-3 전개 확인** (`development_confirm`):
 - `[A]pprove` → Phase 3 / `[R]eject` → 전개 선정 복귀
@@ -253,6 +262,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `ai-validate` | v2.0: 프로바이더 설정 검증 |
 | `ai-mode` | v2.0: standalone/passthrough 모드 확인 |
 | `ai-cost` | v2.0: 토큰 사용량 요약 |
+| `ensemble-dev [--workers <list>]` | v2.2: Phase 2 앙상블 전개안 (외부 CLI 병렬, 기본 gemini-cli,codex-cli) |
 
 ---
 
