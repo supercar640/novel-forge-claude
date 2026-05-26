@@ -1,8 +1,19 @@
-# Novel Factory (NF) v2.0
+# Novel Factory (NF) v2.7
 
 PD(기획자)와 AI가 협업하여 웹소설을 기획하고 집필하는 인터랙티브 작성 도구.
 
-**v2.0 핵심 변경**: AI 비종속화 — Phase별로 다른 LLM(OpenAI, Anthropic, Google, Ollama 등)을 자유롭게 조합할 수 있다.
+**v2.0 핵심**: AI 비종속화 — Phase별로 다른 LLM(OpenAI, Anthropic, Google, Ollama 등)을 자유롭게 조합할 수 있다.
+
+**v2.2~2.7 진화**: 외부 CLI 에이전트(gemini/codex/claude)를 동원하는 **하이브리드 앙상블·릴레이 집필**과, PD의 결정 신호를 누적해 되먹이는 **재미/취향 학습 레이어**.
+
+| 버전 | 기능 |
+|------|------|
+| v2.2 | 앙상블 전개안 (`ensemble-dev`) |
+| v2.3 | 릴레이 집필 파이프라인 (`draft-pipeline`) |
+| v2.4 | 재미/취향 학습 토대 (`taste-init`/`taste-learn`/`taste-apply`) |
+| v2.5 | 뻔함 가드 (`cliche-guard`) |
+| v2.6 | 재미 보존 가드 (`fun-diff`) |
+| v2.7 | PD 직접 편집을 취향 신호로 포착 (`pd_edit`) |
 
 > 이전 버전(Novel Forge Claude v1.7)은 [`legacy/nfc-v1.7`](../../tree/legacy/nfc-v1.7) 브랜치에서 확인할 수 있다.
 
@@ -137,6 +148,8 @@ python nf.py <command>
 | `config <key> <value>` | — | 설정 변경 (style_reference, writing_mode, auto_write) |
 | `context-update` | — | 컨텍스트 갱신 완료 |
 | `context-backup` | — | 컨텍스트 백업 |
+| `backup-episode <file>` | — | 에피소드 파일 백업 |
+| `char-count <file>` | — | 파일의 본문 글자 수 집계 |
 | `next` | — | 다음 단계 진행 |
 | `import-manuscript <file>` | — | 기존 원고 임포트 |
 | `import-context` | — | 기존 컨텍스트 파일 임포트 |
@@ -181,24 +194,24 @@ python nf.py <command>
 
 1·2단계는 `draft-pipeline`으로 자동 실행되고, 3단계와 승인은 라이브 Claude Code가 수행한다. 모든 단계가 `episodes/ep###_making/`에 **새 파일로 보존**되어 제작 히스토리가 남는다 (덮어쓰기 없음). 승인된 최종본만 `episodes/ep###.md`로 승격된다.
 
-### v2.4 재미/취향 학습 (토대)
+### v2.4~v2.7 재미/취향 학습
 
-| 명령어 | 설명 |
-|--------|------|
-| `taste-init [--force]` | 취향 프로파일 시드 (`context/taste_profile.md`) |
-| `taste-learn [--worker <t>]` | 신호를 정제해 프로파일 갱신 제안 생성 (`taste/profile_proposal.md`) |
-| `taste-apply` | 갱신 제안을 프로파일에 적용 (이전 버전은 `backup/`에 보존) |
-| `cliche-guard [--worker <t>]` | 제안 전개안을 취향 기준으로 채점, 너무 안전하면 경고·재생성 제안 |
-| `fun-diff <before> <after> [--worker <t>]` | 초고 vs 퇴고본 재미 손실 검출·복원 제안 |
+| 명령어 | 버전 | 설명 |
+|--------|------|------|
+| `taste-init [--force]` | v2.4 | 취향 프로파일 시드 (`context/taste_profile.md`) |
+| `taste-learn [--worker <t>]` | v2.4 | 신호를 정제해 프로파일 갱신 제안 생성 (`taste/profile_proposal.md`) |
+| `taste-apply` | v2.4 | 갱신 제안을 프로파일에 적용 (이전 버전은 `backup/`에 보존) |
+| `cliche-guard [--worker <t>]` | v2.5 | 제안 전개안을 취향 기준으로 채점, 너무 안전하면 경고·재생성 제안 |
+| `fun-diff <before> <after> [--worker <t>]` | v2.6 | 초고 vs 퇴고본 재미 손실 검출·복원 제안 |
 
 LLM 라이터가 "재미"를 모른다는 문제(뻔한 전개 선택, 퇴고 시 재미 요소 감축)를 보완하는 **선호 조건화 레이어**. 모델 가중치를 학습하는 게 아니라, PD 결정 신호를 누적해 취향 프로파일로 정제하고 프롬프트에 되먹인다.
 
 - **신호 자동 로깅**: `select`/`discard`/`hold`/`revise` 결정이 `taste/signals.jsonl`에 자동 적재 (어떤 확률대 N/M/R를 고르고 무엇을 버렸는지 포함)
-- **PD 직접 편집 학습**: `pd-proofread`로 PD 퇴고본 등록 시, 직전 AI 초안과 비교해 PD가 직접 **뺀/넣은** 내용을 `pd_edit` 신호로 기록 → 말로 한 피드백뿐 아니라 실제 손편집까지 취향으로 반영
+- **PD 직접 편집 학습 (v2.7)**: `pd-proofread`로 PD 퇴고본 등록 시, 직전 AI 초안과 difflib로 비교해 PD가 직접 **뺀/넣은** 내용을 `pd_edit` 신호로 기록 → 말로 한 피드백뿐 아니라 실제 손편집까지 취향으로 반영 (reflection에서 가장 강한 신호로 취급)
 - **취향 프로파일**: `context/taste_profile.md`가 웹소설 재미 원칙으로 시드되고, 모든 에이전트 프롬프트에 "PD 취향·재미 지침"으로 주입된다
 - **학습 루프**: `taste-learn`이 신호를 reflection 모델로 정제해 갱신 제안을 만들고, PD 승인 후 `taste-apply`로 적용한다 ('PD 고정 지침'은 학습이 덮어쓰지 않음)
-- **뻔함 가드** (`cliche-guard`): Phase 2 제안 항목을 취향 기준으로 채점(의외성/개연성/매력/뻔함)하고, 신선한 선택지가 없으면 경고+재생성 제안 → "안전한 전개만 골라 김빠짐" 방지
-- **재미 보존 가드** (`fun-diff`): 초고 vs 퇴고본을 비교해 재미 요소(대사·반전·감각 묘사·개성)의 삭제·약화를 검출하고 복원 제안 → "퇴고하며 재미 감축" 방지 (단순 교정은 지적하지 않음)
+- **뻔함 가드 (v2.5)** (`cliche-guard`): Phase 2 제안 항목을 취향 기준으로 채점(의외성/개연성/매력/뻔함)하고, 신선한 선택지가 없으면 경고+재생성 제안 → "안전한 전개만 골라 김빠짐" 방지
+- **재미 보존 가드 (v2.6)** (`fun-diff`): 초고 vs 퇴고본을 비교해 재미 요소(대사·반전·감각 묘사·개성)의 삭제·약화를 검출하고 복원 제안 → "퇴고하며 재미 감축" 방지 (단순 교정은 지적하지 않음)
 
 ### 지원 프로바이더
 
@@ -232,13 +245,24 @@ novel_factory/
 │   ├── config.py            # v2.0: 프로젝트별 AI 설정 (ai_config.json)
 │   ├── orchestrator.py      # v2.0: Phase↔에이전트 연결
 │   ├── cost_tracker.py      # v2.0: 토큰 사용량 추적
+│   ├── ensemble.py          # v2.2: 앙상블 전개안 fan-out
+│   ├── pipeline.py          # v2.3: 릴레이 집필 파이프라인
+│   ├── taste.py             # v2.4: 취향 신호 로깅 + 프로파일 시드
+│   ├── taste_learn.py       # v2.4: 신호 정제 → 프로파일 갱신 제안
+│   ├── cliche_guard.py      # v2.5: 뻔함 가드 (제안 채점)
+│   ├── fun_diff.py          # v2.6: 재미 보존 가드 (초고↔퇴고 비교)
+│   ├── pd_edit.py           # v2.7: PD 손편집 diff → pd_edit 신호
 │   ├── providers/           # v2.0: AI 프로바이더 추상화
 │   │   ├── base.py          # AIProvider 추상 클래스
 │   │   ├── anthropic_provider.py
 │   │   ├── openai_provider.py
 │   │   ├── google_provider.py
 │   │   ├── openrouter_provider.py
-│   │   └── ollama_provider.py
+│   │   ├── ollama_provider.py
+│   │   ├── cli_base.py      # v2.2: CLI 프로바이더 공통 base
+│   │   ├── gemini_cli_provider.py
+│   │   ├── codex_cli_provider.py
+│   │   └── claude_cli_provider.py
 │   ├── agents/              # v2.0: Phase별 에이전트
 │   │   ├── base_agent.py    # 컨텍스트 주입 + AI 호출
 │   │   ├── planning_agent.py    # Phase 1: 기획
@@ -256,10 +280,11 @@ novel_factory/
 │       ├── state.json
 │       ├── ai_config.json   # v2.0: Phase별 AI 설정
 │       ├── cost_log.json    # v2.0: 토큰 사용량 로그
-│       ├── context/         # 컨텍스트 (6개 필수 + foreshadow/payoff)
-│       ├── episodes/        # 완성 원고
+│       ├── context/         # 컨텍스트 (6개 필수 + foreshadow/payoff + taste_profile.md)
+│       ├── episodes/        # 완성 원고 (+ ep###_making/ 제작 히스토리)
 │       ├── drafts/          # 작업 중 초안
 │       ├── shelve/          # 보류 항목
+│       ├── taste/           # v2.4: 취향 신호(signals.jsonl) + 갱신 제안
 │       ├── polishing/guideline.md
 │       └── backup/
 ├── ideas/                   # 소설 아이디어/컨셉 보관함 (git 미추적, 로컬 전용)
