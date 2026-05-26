@@ -279,6 +279,18 @@ class ProjectFiles:
         return len(body)
 
     @staticmethod
+    def count_pages(text: str) -> int:
+        """만화 스토리보드의 페이지 수 집계 ('## P' 헤딩)."""
+        import re
+        return len(re.findall(r"(?m)^##\s+P\d+", text))
+
+    @staticmethod
+    def count_cuts(text: str) -> int:
+        """만화 스토리보드의 총 컷 수 집계 ('### Cut' 헤딩)."""
+        import re
+        return len(re.findall(r"(?m)^###\s+Cut\s+\d+", text))
+
+    @staticmethod
     def validate_encoding(filepath: Path) -> bool:
         """파일의 UTF-8 인코딩 무결성 검증. 손상 시 False 반환."""
         try:
