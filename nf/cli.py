@@ -128,6 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_tlearn.add_argument("--worker", default=None, help="reflection worker 타입 (기본: gemini-cli)")
     sub.add_parser("taste-apply", help="v2.4: 갱신 제안을 프로파일에 적용 (이전 버전 백업)")
 
+    # v2.5: 뻔함 가드 (Phase 2 제안 항목을 취향 기준으로 채점)
+    p_guard = sub.add_parser("cliche-guard", help="v2.5: 제안 항목의 뻔함 심사 (취향 기준)")
+    p_guard.add_argument("--worker", default=None, help="심사 worker 타입 (기본: codex-cli)")
+
     return parser
 
 
@@ -313,6 +317,8 @@ def main(argv=None):
         handle_taste_learn(pf, state, args)
     elif args.command == "taste-apply":
         handle_taste_apply(pf)
+    elif args.command == "cliche-guard":
+        handle_cliche_guard(pf, state, args)
     else:
         parser.print_help()
 
@@ -846,6 +852,50 @@ def handle_taste_apply(pf):
     print(display.ok(f"프로파일 적용: {applied_rel}"))
     if result.get("backup"):
         print(display.ok(f"이전 버전 백업: {result['backup'].relative_to(pf.root)}"))
+
+
+def handle_cliche_guard(pf, state, args):
+    """v2.5: 제안 항목(PROPOSED)을 취향 프로파일 기준으로 뻔함 심사."""
+    from .cliche_guard import run_cliche_guard, DEFAULT_WORKER
+    from .taste import item_brief
+
+    items = [item_brief(i) for i in state.items if i.status == ItemStatus.PROPOSED.value]
+    if not items:
+        print(display.error("심사할 제안 항목이 없습니다. (add로 옵션을 먼저 등록하세요)"))
+        sys.exit(1)
+
+    worker = {"type": args.worker.strip(), "model": "", "timeout": 300} if getattr(args, "worker", None) else None
+    wname = (worker or DEFAULT_WORKER)["type"]
+    print(f"뻔함 심사 중 (worker: {wname}) — {len(items)}개 옵션 채점 ...")
+
+    result = run_cliche_guard(pf.root, items, worker=worker)
+    if not result.get("ok"):
+        print(display.error(f"심사 실패: {result.get('reason')}"))
+        sys.exit(1)
+
+    parsed = result.get("parsed")
+    if not parsed:
+        print(display.error("심사 결과 파싱 실패. 원문 일부:"))
+        print((result.get("raw") or "")[:1500])
+        sys.exit(1)
+
+    print()
+    for o in parsed.get("options", []):
+        print(
+            f"  [{o.get('id')}] 의외 {o.get('의외성')} · 개연 {o.get('개연성')} · "
+            f"매력 {o.get('매력')} · 뻔함 {o.get('뻔함')}  — {o.get('평', '')}"
+        )
+    print()
+    print(f"총평: {parsed.get('verdict', '')}")
+    if result.get("too_safe"):
+        print(display.error("⚠ 전개안이 전반적으로 너무 안전합니다 (김빠짐 위험)."))
+        if parsed.get("suggestion"):
+            print(f"제안: {parsed.get('suggestion')}")
+        print("→ 'retry'로 재생성하거나, 회피 패턴을 피한 더 과감한 안을 추가하세요.")
+    else:
+        print(display.ok("신선한 선택지가 존재합니다."))
+        if parsed.get("suggestion"):
+            print(f"보완 제안: {parsed.get('suggestion')}")
 
 
 def handle_draft_pipeline(pf, state, args):
