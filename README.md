@@ -214,6 +214,7 @@ novel_factory/
 │       ├── shelve/          # 보류 항목
 │       ├── polishing/guideline.md
 │       └── backup/
+├── ideas/                   # 소설 아이디어/컨셉 보관함 (git 미추적, 로컬 전용)
 ├── AI_GUIDE.md              # v2.0: 범용 AI 가이드 (모델 무관)
 ├── CLAUDE.md                # Claude Code 전용 행동 매뉴얼
 └── NF_v2.0_plan.md          # 업그레이드 계획서
