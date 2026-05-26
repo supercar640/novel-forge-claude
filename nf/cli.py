@@ -132,6 +132,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_guard = sub.add_parser("cliche-guard", help="v2.5: 제안 항목의 뻔함 심사 (취향 기준)")
     p_guard.add_argument("--worker", default=None, help="심사 worker 타입 (기본: codex-cli)")
 
+    # v2.6: 재미 보존 diff 가드 (퇴고 전후 재미 손실 검출)
+    p_fdiff = sub.add_parser("fun-diff", help="v2.6: 초고 vs 퇴고본 재미 보존 검수")
+    p_fdiff.add_argument("before", help="BEFORE 원고 경로 (초고/직전)")
+    p_fdiff.add_argument("after", help="AFTER 원고 경로 (퇴고본)")
+    p_fdiff.add_argument("--worker", default=None, help="검수 worker 타입 (기본: codex-cli)")
+
     return parser
 
 
@@ -319,6 +325,8 @@ def main(argv=None):
         handle_taste_apply(pf)
     elif args.command == "cliche-guard":
         handle_cliche_guard(pf, state, args)
+    elif args.command == "fun-diff":
+        handle_fun_diff(pf, state, args)
     else:
         parser.print_help()
 
@@ -896,6 +904,53 @@ def handle_cliche_guard(pf, state, args):
         print(display.ok("신선한 선택지가 존재합니다."))
         if parsed.get("suggestion"):
             print(f"보완 제안: {parsed.get('suggestion')}")
+
+
+def handle_fun_diff(pf, state, args):
+    """v2.6: 초고(BEFORE) vs 퇴고본(AFTER)의 재미 손실 검수."""
+    from .fun_diff import run_fun_diff, DEFAULT_WORKER
+
+    def _resolve(p):
+        pp = Path(p)
+        return pp if pp.is_absolute() else (pf.root / p)
+
+    before = _resolve(args.before)
+    after = _resolve(args.after)
+    worker = {"type": args.worker.strip(), "model": "", "timeout": 600} if getattr(args, "worker", None) else None
+    wname = (worker or DEFAULT_WORKER)["type"]
+    print(f"재미 보존 검수 중 (worker: {wname}) — {before.name} → {after.name} ...")
+
+    result = run_fun_diff(pf.root, before, after, worker=worker)
+    if not result.get("ok"):
+        print(display.error(f"검수 실패: {result.get('reason')}"))
+        sys.exit(1)
+
+    parsed = result.get("parsed")
+    if not parsed:
+        print(display.error("검수 결과 파싱 실패. 원문 일부:"))
+        print((result.get("raw") or "")[:1500])
+        sys.exit(1)
+
+    print()
+    regs = parsed.get("regressions") or []
+    if regs:
+        for r in regs:
+            print(f"  [심각도 {r.get('심각도')}] {r.get('요소')}")
+            print(f"     before: {r.get('before')}")
+            print(f"     after : {r.get('after')}")
+            print(f"     복원  : {r.get('복원제안')}")
+    else:
+        print("  (감지된 재미 손실 없음)")
+
+    pw = parsed.get("preserved_well") or []
+    if pw:
+        print(f"\n잘 보존됨: {', '.join(str(x) for x in pw)}")
+    print(f"\n총평: {parsed.get('verdict', '')}")
+
+    if result.get("regressed"):
+        print(display.error("⚠ 퇴고에서 재미 요소가 감축됐습니다. 복원 제안을 검토하세요."))
+    else:
+        print(display.ok("재미 손실 없음 — 퇴고가 재미를 보존했습니다."))
 
 
 def handle_draft_pipeline(pf, state, args):
