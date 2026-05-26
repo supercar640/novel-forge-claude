@@ -217,8 +217,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LLM 라이터는 "재미"를 모른다 — 뻔한 전개를 고르거나 퇴고하며 재미 요소를 깎는다. 이를 보완하기 위해 **PD 결정 신호를 누적해 취향 프로파일로 distill하고 프롬프트에 되먹이는** 선호 조건화 레이어. (가중치 학습이 아님)
 
-- **신호 자동 로깅**: `select`/`discard`/`hold`/`revise` → `taste/signals.jsonl` (마찰 0, 자동)
+- **신호 자동 로깅**: `select`/`discard`/`hold`/`revise`/`pd_edit` → `taste/signals.jsonl` (마찰 0, 자동)
   - select는 고른 것 vs 버린 것 + 확률 분류(N/M/R)까지 기록 → "PD가 안전한 전개를 기피하는가" 같은 패턴의 원천
+  - **PD 직접 편집 (v2.7)**: `pd-proofread` 등록 시 직전 AI 초안과 difflib 비교 → PD가 **뺀 줄/넣은 줄**을 `pd_edit` 신호로 기록 (말로 한 지시뿐 아니라 실제 손편집이 학습됨). reflection에서 가장 강한 신호로 취급
 - **취향 프로파일**: `context/taste_profile.md` (init 시 웹소설 재미 원칙으로 시드)
   - base_agent가 **"PD 취향·재미 지침"** 헤딩으로 모든 에이전트 프롬프트에 주입 → 제안·집필·퇴고에 반영
   - '학습됨' 섹션(회피 패턴/살려야 할 요소/문체 선호)은 `taste-learn`이 갱신, 'PD 고정 지침'은 PD 수동

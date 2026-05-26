@@ -611,6 +611,27 @@ def handle_pd_proofread(pf, state, args):
     if not full_path.exists():
         print(display.error(f"파일을 찾을 수 없습니다: {filepath}"))
         sys.exit(1)
+    # 취향 신호: PD 직접 편집 — 직전 AI 초안 → PD 퇴고본 diff (difflib, AI 호출 없음)
+    try:
+        if state.draft_files:
+            ai_draft = pf.root / state.draft_files[-1]
+            if ai_draft.exists():
+                from .pd_edit import summarize_edit
+                from .taste import log_signal
+                edit = summarize_edit(
+                    ai_draft.read_text(encoding="utf-8"),
+                    full_path.read_text(encoding="utf-8"),
+                )
+                log_signal(
+                    pf.root, state, "pd_edit",
+                    removed=edit["removed"], added=edit["added"],
+                    removed_count=edit["removed_count"], added_count=edit["added_count"],
+                )
+                print(display.ok(
+                    f"PD 편집 신호 기록: 뺌 {edit['removed_count']}줄 / 넣음 {edit['added_count']}줄"
+                ))
+    except Exception:
+        pass  # 신호 캡처 실패가 pd-proofread를 막아선 안 됨
     run_action(pf, state, "pd-proofread", filepath=filepath)
 
 
