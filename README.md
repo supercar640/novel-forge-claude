@@ -181,6 +181,21 @@ python nf.py <command>
 
 1·2단계는 `draft-pipeline`으로 자동 실행되고, 3단계와 승인은 라이브 Claude Code가 수행한다. 모든 단계가 `episodes/ep###_making/`에 **새 파일로 보존**되어 제작 히스토리가 남는다 (덮어쓰기 없음). 승인된 최종본만 `episodes/ep###.md`로 승격된다.
 
+### v2.4 재미/취향 학습 (토대)
+
+| 명령어 | 설명 |
+|--------|------|
+| `taste-init [--force]` | 취향 프로파일 시드 (`context/taste_profile.md`) |
+| `taste-learn [--worker <t>]` | 신호를 정제해 프로파일 갱신 제안 생성 (`taste/profile_proposal.md`) |
+| `taste-apply` | 갱신 제안을 프로파일에 적용 (이전 버전은 `backup/`에 보존) |
+
+LLM 라이터가 "재미"를 모른다는 문제(뻔한 전개 선택, 퇴고 시 재미 요소 감축)를 보완하는 **선호 조건화 레이어**. 모델 가중치를 학습하는 게 아니라, PD 결정 신호를 누적해 취향 프로파일로 정제하고 프롬프트에 되먹인다.
+
+- **신호 자동 로깅**: `select`/`discard`/`hold`/`revise` 결정이 `taste/signals.jsonl`에 자동 적재 (어떤 확률대 N/M/R를 고르고 무엇을 버렸는지 포함)
+- **취향 프로파일**: `context/taste_profile.md`가 웹소설 재미 원칙으로 시드되고, 모든 에이전트 프롬프트에 "PD 취향·재미 지침"으로 주입된다
+- **학습 루프**: `taste-learn`이 신호를 reflection 모델로 정제해 갱신 제안을 만들고, PD 승인 후 `taste-apply`로 적용한다 ('PD 고정 지침'은 학습이 덮어쓰지 않음)
+- 후속: 뻔함 가드(Phase 2), 재미 보존 diff 가드(퇴고)
+
 ### 지원 프로바이더
 
 | 타입 | 모델 예시 | API 키 환경변수 |

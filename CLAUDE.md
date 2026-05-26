@@ -213,6 +213,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## 재미/취향 학습 (v2.4, 토대)
+
+LLM 라이터는 "재미"를 모른다 — 뻔한 전개를 고르거나 퇴고하며 재미 요소를 깎는다. 이를 보완하기 위해 **PD 결정 신호를 누적해 취향 프로파일로 distill하고 프롬프트에 되먹이는** 선호 조건화 레이어. (가중치 학습이 아님)
+
+- **신호 자동 로깅**: `select`/`discard`/`hold`/`revise` → `taste/signals.jsonl` (마찰 0, 자동)
+  - select는 고른 것 vs 버린 것 + 확률 분류(N/M/R)까지 기록 → "PD가 안전한 전개를 기피하는가" 같은 패턴의 원천
+- **취향 프로파일**: `context/taste_profile.md` (init 시 웹소설 재미 원칙으로 시드)
+  - base_agent가 **"PD 취향·재미 지침"** 헤딩으로 모든 에이전트 프롬프트에 주입 → 제안·집필·퇴고에 반영
+  - '학습됨' 섹션(회피 패턴/살려야 할 요소/문체 선호)은 `taste-learn`이 갱신, 'PD 고정 지침'은 PD 수동
+- **학습 루프** (`taste-learn` → `taste-apply`):
+  1. `taste-learn`: 신호를 reflection worker(기본 gemini)가 정제 → `taste/profile_proposal.md` 갱신 제안 생성
+  2. Claude Code가 제안 vs 현재 프로파일을 PD에게 제시 → 승인
+  3. `taste-apply`: 이전 프로파일을 `backup/taste_profile_v{N}.md`로 백업 후 제안 적용
+  - PD 고정 지침은 학습이 덮어쓰지 않음 (verbatim 보존)
+- **AI 행동**: 전개 제안·집필·퇴고 시 이 프로파일의 재미 원칙과 회피 패턴을 의식적으로 반영한다. 가장 뻔한 선택을 경계하고, 호평받은 재미 요소는 퇴고에서 보존한다.
+
+> 후속 계획: 뻔함 가드(Phase 2 자기비평), 재미 보존 diff 가드(퇴고). [전역 취향(작품 공통)은 작가 요청 시]
+
 ## 창작 규칙
 
 ### 전개 옵션 포맷
@@ -276,6 +294,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `ai-cost` | v2.0: 토큰 사용량 요약 |
 | `ensemble-dev [--workers <list>]` | v2.2: Phase 2 앙상블 전개안 (외부 CLI 병렬, 기본 gemini-cli,codex-cli) |
 | `draft-pipeline [--draft <t>] [--revise <t>]` | v2.3: 릴레이 집필 (Gemini 초고→Codex 1차퇴고 자동, 2차는 Claude) |
+| `taste-init [--force]` | v2.4: 취향 프로파일 시드 (context/taste_profile.md) |
+| `taste-learn [--worker <t>]` | v2.4: 신호 정제 → 프로파일 갱신 제안 (기본 gemini-cli) |
+| `taste-apply` | v2.4: 갱신 제안을 프로파일에 적용 (이전 버전 backup/) |
 
 ---
 

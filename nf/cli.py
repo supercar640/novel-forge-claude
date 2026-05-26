@@ -119,6 +119,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_pipe.add_argument("--draft", default=None, help="초고 worker 타입 (기본: gemini-cli)")
     p_pipe.add_argument("--revise", default=None, help="1차 퇴고 worker 타입 (기본: codex-cli)")
 
+    # v2.4: 재미/취향 학습 토대
+    p_taste = sub.add_parser("taste-init", help="v2.4: 취향 프로파일 시드 (context/taste_profile.md)")
+    p_taste.add_argument("--force", action="store_true", help="기존 프로파일 덮어쓰기")
+
+    # v2.4: 학습 루프 (신호 → 프로파일 갱신 제안 → 적용)
+    p_tlearn = sub.add_parser("taste-learn", help="v2.4: 신호를 정제해 프로파일 갱신 제안 생성")
+    p_tlearn.add_argument("--worker", default=None, help="reflection worker 타입 (기본: gemini-cli)")
+    sub.add_parser("taste-apply", help="v2.4: 갱신 제안을 프로파일에 적용 (이전 버전 백업)")
+
     return parser
 
 
@@ -225,7 +234,12 @@ def main(argv=None):
     elif args.command == "hold":
         handle_hold(pf, state, args.id)
     elif args.command == "discard":
+        from .taste import log_signal, item_brief
+        _disc = state.get_item(args.id)
+        _disc_brief = item_brief(_disc) if _disc else None
         run_action(pf, state, "discard", item_id=args.id)
+        if _disc_brief:
+            log_signal(pf.root, state, "discard", item=_disc_brief)
     elif args.command == "retry":
         run_action(pf, state, "retry")
     elif args.command == "approve":
@@ -240,6 +254,8 @@ def main(argv=None):
         if was_import_review and import_file_path:
             _save_imported_episode(pf, state, import_file_path)
     elif args.command == "revise":
+        from .taste import log_signal
+        log_signal(pf.root, state, "revise", feedback=(args.feedback or "")[:1000])
         run_action(pf, state, "revise", feedback=args.feedback)
     elif args.command == "reject":
         run_action(pf, state, "reject")
@@ -291,13 +307,25 @@ def main(argv=None):
         handle_ensemble_dev(pf, state, args)
     elif args.command == "draft-pipeline":
         handle_draft_pipeline(pf, state, args)
+    elif args.command == "taste-init":
+        handle_taste_init(pf, args)
+    elif args.command == "taste-learn":
+        handle_taste_learn(pf, state, args)
+    elif args.command == "taste-apply":
+        handle_taste_apply(pf)
     else:
         parser.print_help()
 
 
 def handle_select(pf, state, item_ids):
     """select 처리 + 미선정 active 항목을 자동 shelve."""
+    from .taste import log_signal, item_brief
     selected_set = set(item_ids)
+    # 취향 신호: 무엇을 골랐고 무엇을 버렸는가 (상태 변경 전에 캡처)
+    decision_step = state.step  # run_action 전이 전 결정 시점 step
+    chosen = [item_brief(i) for i in state.items if i.id in selected_set]
+    rejected = [item_brief(i) for i in state.items
+                if i.id not in selected_set and i.status == ItemStatus.PROPOSED.value]
     # 선정 전에 나머지 active 항목을 shelve
     if state.step in (Step.DIRECTION_DECISION.value, Step.DEVELOPMENT_DECISION.value):
         for item in state.items:
@@ -307,17 +335,23 @@ def handle_select(pf, state, item_ids):
                 shelve_path = pf.save_to_shelve(item.text, item.id, prefix, item.probability)
                 print(display.ok(f"자동 보류: {display.format_item_short(item)} → {shelve_path.name}"))
     run_action(pf, state, "select", item_ids=item_ids)
+    log_signal(pf.root, state, "select", step=decision_step, chosen=chosen, rejected=rejected)
 
 
 def handle_hold(pf, state, item_id):
     """v1.7: hold 처리 + shelve 저장."""
+    from .taste import log_signal, item_brief
     # writing_decision hold → draft를 shelve로 보류
     if state.step == Step.WRITING_DECISION.value:
+        log_signal(pf.root, state, "hold_draft")
         _handle_writing_hold(pf, state)
         return
     # Phase 1/2 item hold + shelve 저장
     item = state.get_item(item_id)
+    brief = item_brief(item) if item else None
     run_action(pf, state, "hold", item_id=item_id)
+    if brief:
+        log_signal(pf.root, state, "hold", item=brief)
     if item and state.step in (Step.DIRECTION_DECISION.value, Step.DEVELOPMENT_DECISION.value):
         prefix = "idea" if state.phase == Phase.PHASE1.value else "dev"
         shelve_path = pf.save_to_shelve(item.text, item.id, prefix, item.probability)
@@ -399,6 +433,8 @@ def handle_init(args):
     base_dir.mkdir(exist_ok=True)
     try:
         pf = ProjectFiles.create_project(base_dir, name, title)
+        from .taste import seed_profile
+        seed_profile(pf.root)
         print(display.ok("project created: " + str(pf.root)))
         print(display.step_msg("Phase 1: direction proposal"))
         print("  use 'add' to add directions")
@@ -762,6 +798,54 @@ def handle_ensemble_dev(pf, state, args):
     print("  2) Claude Code가 자체 전개안 배치를 추가로 생성합니다.")
     print("  3) source(gemini/codex/claude)별로 모아 PD에게 전체 제시합니다.")
     print("  4) PD 선택분을 'nf add'로 등록 → 'nf select'로 확정합니다.")
+
+
+def handle_taste_init(pf, args):
+    """v2.4: 취향 프로파일 시드/재시드."""
+    from .taste import seed_profile, profile_path
+    created = seed_profile(pf.root, force=bool(getattr(args, "force", False)))
+    p = profile_path(pf.root)
+    rel = p.relative_to(pf.root)
+    if created:
+        print(display.ok(f"취향 프로파일 시드: {rel}"))
+    else:
+        print(display.ok(f"이미 존재합니다: {rel} (덮어쓰려면 --force)"))
+
+
+def handle_taste_learn(pf, state, args):
+    """v2.4: 신호를 정제해 프로파일 갱신 제안을 생성 (적용은 taste-apply)."""
+    from .taste_learn import run_taste_learn, DEFAULT_WORKER
+
+    worker = {"type": args.worker.strip(), "model": "", "timeout": 600} if getattr(args, "worker", None) else None
+    wname = (worker or DEFAULT_WORKER)["type"]
+    print(f"취향 학습 중 (reflection worker: {wname}) — 신호 정제 → 갱신 제안 ...")
+
+    result = run_taste_learn(pf.root, worker=worker)
+    if not result.get("ok"):
+        print(display.error(f"학습 실패: {result.get('reason')}"))
+        sys.exit(1)
+
+    prop_rel = result["proposal_path"].relative_to(pf.root)
+    print(display.ok(f"신호 {result['signal_count']}건 정제 → 제안 생성: {prop_rel}"))
+    print()
+    print("다음 단계:")
+    print(f"  1) {prop_rel} 를 현재 context/taste_profile.md와 비교 검토 (Claude Code가 PD에게 제시)")
+    print("  2) 승인하면 'nf taste-apply'로 적용 (이전 버전은 backup/에 보존)")
+
+
+def handle_taste_apply(pf):
+    """v2.4: 갱신 제안을 프로파일에 적용 (이전 버전 백업)."""
+    from .taste_learn import apply_proposal
+
+    result = apply_proposal(pf.root)
+    if not result.get("ok"):
+        print(display.error(f"적용 실패: {result.get('reason')}"))
+        sys.exit(1)
+
+    applied_rel = result["applied"].relative_to(pf.root)
+    print(display.ok(f"프로파일 적용: {applied_rel}"))
+    if result.get("backup"):
+        print(display.ok(f"이전 버전 백업: {result['backup'].relative_to(pf.root)}"))
 
 
 def handle_draft_pipeline(pf, state, args):

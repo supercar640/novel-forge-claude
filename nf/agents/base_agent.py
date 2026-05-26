@@ -61,6 +61,15 @@ class PhaseAgent:
         """
         parts = [self.prompt_template]
 
+        # PD 취향·재미 지침 (강조 주입 — 일반 컨텍스트보다 앞에 둔다)
+        taste = context.get("taste_profile", "")
+        if taste:
+            parts.append(
+                "\n\n## PD 취향·재미 지침 (생성·선정·퇴고 시 반드시 반영)\n"
+                + taste
+                + "\n"
+            )
+
         # Inject context files
         context_files = context.get("context_files", {})
         if context_files:
@@ -115,6 +124,7 @@ class PhaseAgent:
             "context_files": {},
             "foreshadow": "",
             "payoff": "",
+            "taste_profile": "",
             "selected_development": "",
             "style_reference": state.config.get("style_reference", ""),
             "episode_count": state.episode_count,
@@ -132,6 +142,8 @@ class PhaseAgent:
                     context["foreshadow"] = content
                 elif name == "payoff.md":
                     context["payoff"] = content
+                elif name == "taste_profile.md":
+                    context["taste_profile"] = content
                 else:
                     context["context_files"][name] = content
 
