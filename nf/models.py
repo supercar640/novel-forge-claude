@@ -84,6 +84,7 @@ class ProjectState:
     context_version: int = 0
     items: list[Item] = field(default_factory=list)
     selected_developments: list[str] = field(default_factory=list)
+    work_type: str = "novel"  # "novel" | "comic"
     config: dict = field(default_factory=lambda: {"style_reference": None, "writing_mode": None, "auto_write": False})
     revision_feedback: Optional[str] = None
     draft_files: list[str] = field(default_factory=list)
@@ -105,6 +106,7 @@ class ProjectState:
             "context_version": self.context_version,
             "items": [item.to_dict() for item in self.items],
             "selected_developments": self.selected_developments,
+            "work_type": self.work_type,
             "config": self.config,
             "revision_feedback": self.revision_feedback,
             "draft_files": self.draft_files,
@@ -128,6 +130,7 @@ class ProjectState:
             context_version=d.get("context_version", 0),
             items=items,
             selected_developments=d.get("selected_developments", []),
+            work_type=d.get("work_type", "novel"),
             config=cls._migrate_config(d.get("config", {"style_reference": None, "writing_mode": None, "auto_write": False})),
             revision_feedback=d.get("revision_feedback"),
             draft_files=cls._migrate_draft_files(d),
@@ -156,6 +159,7 @@ class ProjectState:
             config["writing_mode"] = None
         if "auto_write" not in config:
             config["auto_write"] = False
+        config.setdefault("comic_pages_per_episode", 18)
         return config
 
     @property
