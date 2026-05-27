@@ -259,6 +259,31 @@ class ProjectFiles:
         """프로젝트 루트 기준 파일 읽기."""
         return (self.root / relative_path).read_text(encoding="utf-8")
 
+    def to_root_relative(self, filepath: str) -> str:
+        """경로를 프로젝트 루트 기준 상대경로(POSIX)로 정규화한다.
+
+        draft_files 등은 소비 시 `self.root / df`로 재구성되므로 항상 루트
+        상대경로로 적재해야 한다(아니면 prefix가 이중화되어 파일을 못 찾음).
+        입력이 루트 상대('drafts/x.md') / CWD 상대('projects/foo/drafts/x.md')
+        / 절대경로 무엇이든 받아 변환하며, 프로젝트 밖 파일이면 입력을 그대로
+        둔다(예: 외부 원고 임포트)."""
+        if not filepath:
+            return filepath
+        root = self.root.resolve()
+        p = Path(filepath)
+        if p.is_absolute():
+            abs_p = p.resolve()
+        elif (self.root / p).exists():
+            abs_p = (self.root / p).resolve()      # 루트 상대로 이미 유효
+        elif (Path.cwd() / p).exists():
+            abs_p = (Path.cwd() / p).resolve()     # CWD 상대로 유효
+        else:
+            abs_p = (self.root / p).resolve()      # 기본: 루트 상대로 간주
+        try:
+            return abs_p.relative_to(root).as_posix()
+        except ValueError:
+            return filepath                        # 프로젝트 밖 경로
+
     @staticmethod
     def count_story_chars(text: str) -> int:
         """원고 본문 글자 수 계산 (공백 포함). 마크다운 헤더, 구분선, 끝 태그, 테이블 줄 제외."""

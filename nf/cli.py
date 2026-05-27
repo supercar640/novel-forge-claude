@@ -546,7 +546,8 @@ def handle_next(pf, state):
 
 
 def handle_save(pf, state, args):
-    filepath = args.file
+    # draft_files는 루트 상대경로로 적재해야 승격/검증(`pf.root / df`)이 정확하다.
+    filepath = pf.to_root_relative(args.file)
     # proofread 저장 시: 기존 manuscript draft 내용을 proofread 파일로 복사
     # 단, 이미 존재하면 AI가 작성한 퇴고본으로 간주하여 복사 생략
     if args.type == "proofread" and state.draft_files:
@@ -629,7 +630,7 @@ def handle_import_context(pf, state):
 
 def handle_pd_proofread(pf, state, args):
     """PD 자체 퇴고 원고 등록 → 컨텍스트 갱신으로 직행."""
-    filepath = args.file
+    filepath = pf.to_root_relative(args.file)
     full_path = pf.root / filepath
     if not full_path.exists():
         full_path = Path(filepath)
@@ -732,7 +733,8 @@ def handle_scenes(pf, state):
 
 def handle_char_count(pf, state, args):
     """파일의 글자 수 표시. webnovel 모드일 때만 5500자 기준 표시."""
-    filepath = Path(args.file)
+    # 루트 상대 / CWD 상대 / 절대경로 어느 것이든 받아 일관 해석
+    filepath = Path(pf.to_root_relative(args.file))
     # 상대 경로면 프로젝트 루트 기준으로 해석
     if not filepath.is_absolute():
         filepath = pf.root / filepath

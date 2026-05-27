@@ -457,6 +457,10 @@ def handle_command(pf: ProjectFiles, state: ProjectState, cmd: str, kwargs: dict
             pf.save_state(state)
         return state
 
+    # draft_files 적재 경로를 루트 상대로 정규화 (승격/검증의 pf.root/df 일관성)
+    if cmd in ("save", "pd-proofread") and kwargs.get("filepath"):
+        kwargs["filepath"] = pf.to_root_relative(kwargs["filepath"])
+
     # proofread 저장 시: 기존 manuscript draft 내용을 proofread 파일로 복사
     if cmd == "save" and kwargs.get("save_type") == "proofread" and state.draft_files:
         import shutil
