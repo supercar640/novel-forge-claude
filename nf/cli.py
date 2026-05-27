@@ -180,6 +180,8 @@ def check_draft_length(pf, state):
     if not state.draft_files:
         return None
     if state.work_type == "comic":
+        if not state.config.get("webnovel", True):
+            return None  # 자유 모드(webnovel=false): 분량 하한 게이트 비활성
         target = state.config.get("comic_pages_per_episode", 18)
         for df in state.draft_files:
             draft_path = pf.root / df

@@ -45,15 +45,20 @@ class WritingAgent(PhaseAgent):
         prior_text=None,
         *,
         temperature=None,
-        min_chars=5500,
+        min_chars=None,
     ):
-        """작가실 릴레이의 한 단계를 수행. 역할 지시에 따라 원고를 생성/발전시킨다."""
+        """작가실 릴레이의 한 단계를 수행. 역할 지시에 따라 원고를 생성/발전시킨다.
+
+        min_chars가 None이면 분량을 강제하지 않는다.
+        (5,500자 게이트는 webnovel 모드 한정 — run_draft_room이 분기해 전달한다.)
+        """
         user_msg = f"## 당신의 역할: {role_title}\n{role_instructions}\n\n"
         if prior_text:
             user_msg += f"## 직전 단계 산출물 (이어받아 발전시킬 원고)\n{prior_text}\n\n"
+        user_msg += "위 역할에 충실하게, 에피소드 1회분 원고를 출력하세요.\n"
+        if min_chars:
+            user_msg += f"- 최소 {min_chars:,}자 이상의 본문\n"
         user_msg += (
-            "위 역할에 충실하게, 에피소드 1회분 원고를 출력하세요.\n"
-            f"- 최소 {min_chars:,}자 이상의 본문\n"
             "- 장면 전환은 `---`로 구분\n"
             "- 설명·메타코멘트·역할 언급 없이 본문만 출력\n"
         )
