@@ -24,8 +24,8 @@ from .config import create_provider
 # 집필은 5,500자+ 본문이라 전개안 생성보다 훨씬 오래 걸린다 → 넉넉한 타임아웃.
 DEFAULT_DRAFT_WORKER = {"type": "gemini-cli", "model": "", "timeout": 900}
 DEFAULT_REVISE_WORKER = {"type": "codex-cli", "model": "", "timeout": 600}
-DEFAULT_ROOM_GEMINI = {"type": "gemini-cli", "model": "", "timeout": 900}
-DEFAULT_ROOM_CODEX = {"type": "codex-cli", "model": "", "timeout": 900}
+DEFAULT_ROOM_GEMINI = {"type": "gemini-cli", "model": "", "timeout": 1800}
+DEFAULT_ROOM_CODEX = {"type": "codex-cli", "model": "", "timeout": 1800}
 
 # 초고(Gemini)용 추가 지시 — "막 갈김": 다듬기보다 분량·기세·완결.
 DRAFT_INSTRUCTIONS = (
@@ -179,6 +179,9 @@ def run_draft_room(
     gemini_worker = gemini_worker or DEFAULT_ROOM_GEMINI
     codex_worker = codex_worker or DEFAULT_ROOM_CODEX
 
+    # 5,500자 분량 게이트는 webnovel 모드 한정. 그 외에는 분량을 강제하지 않는다.
+    min_chars = 5500 if state.config.get("webnovel", True) else None
+
     ep_num = state.episode_count + 1
     making_dir = project_root / "episodes" / f"ep{ep_num:03d}_making"
     making_dir.mkdir(parents=True, exist_ok=True)
@@ -228,6 +231,7 @@ def run_draft_room(
                 instructions,
                 prior_text=prior,
                 temperature=temp,
+                min_chars=min_chars,
             )
             path = _versioned_path(making_dir, stem)
             path.write_text(
