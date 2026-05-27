@@ -37,6 +37,29 @@ class WritingAgent(PhaseAgent):
         response = self.execute(context, user_msg)
         return response.content
 
+    def relay_pass(
+        self,
+        context,
+        role_title,
+        role_instructions,
+        prior_text=None,
+        *,
+        temperature=None,
+        min_chars=5500,
+    ):
+        """작가실 릴레이의 한 단계를 수행. 역할 지시에 따라 원고를 생성/발전시킨다."""
+        user_msg = f"## 당신의 역할: {role_title}\n{role_instructions}\n\n"
+        if prior_text:
+            user_msg += f"## 직전 단계 산출물 (이어받아 발전시킬 원고)\n{prior_text}\n\n"
+        user_msg += (
+            "위 역할에 충실하게, 에피소드 1회분 원고를 출력하세요.\n"
+            f"- 최소 {min_chars:,}자 이상의 본문\n"
+            "- 장면 전환은 `---`로 구분\n"
+            "- 설명·메타코멘트·역할 언급 없이 본문만 출력\n"
+        )
+        response = self.execute(context, user_msg, temperature=temperature)
+        return response.content
+
     def write_scene(self, context: dict, scene_num: int, instructions: str = "") -> str:
         """장면 1개 집필 (scene 모드)."""
         user_msg = (

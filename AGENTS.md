@@ -62,7 +62,7 @@ nf/
 ├── orchestrator.py     Phase ↔ 에이전트 연결
 ├── cost_tracker.py     토큰/비용 추적
 ├── ensemble.py         v2.2 앙상블 전개안 fan-out
-├── pipeline.py         v2.3 릴레이 집필 파이프라인
+├── pipeline.py         v2.3 릴레이 집필 + v2.8 작가실 릴레이(draft-room)
 ├── taste.py            v2.4 취향 신호 로깅 + 프로파일 시드
 ├── taste_learn.py      v2.4 신호 정제 → 갱신 제안
 ├── cliche_guard.py     v2.5 뻔함 가드
