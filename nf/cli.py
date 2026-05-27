@@ -121,6 +121,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_pipe.add_argument("--draft", default=None, help="초고 worker 타입 (기본: gemini-cli)")
     p_pipe.add_argument("--revise", default=None, help="1차 퇴고 worker 타입 (기본: codex-cli)")
 
+    p_room = sub.add_parser("draft-room", help="v2.8: 6에이전트 작가실 릴레이 집필 (발상→증폭→조율)")
+    p_room.add_argument("--gemini", default=None, help="발상 단계(G1·G2) worker 타입 (기본: gemini-cli)")
+    p_room.add_argument("--codex", default=None, help="증폭 단계(C1·C2) worker 타입 (기본: codex-cli)")
+
     # v2.4: 재미/취향 학습 토대
     p_taste = sub.add_parser("taste-init", help="v2.4: 취향 프로파일 시드 (context/taste_profile.md)")
     p_taste.add_argument("--force", action="store_true", help="기존 프로파일 덮어쓰기")
@@ -332,6 +336,8 @@ def main(argv=None):
         handle_ensemble_dev(pf, state, args)
     elif args.command == "draft-pipeline":
         handle_draft_pipeline(pf, state, args)
+    elif args.command == "draft-room":
+        handle_draft_room(pf, state, args)
     elif args.command == "taste-init":
         handle_taste_init(pf, args)
     elif args.command == "taste-learn":
@@ -1057,3 +1063,46 @@ def handle_draft_pipeline(pf, state, args):
     print(f"     {making_rel}/03_revise2_claude.md 로 저장합니다.")
     print("  3) PD에게 제시: [A]승인 / [M]수정 / [D]폐기")
     print(f"  4) A → episodes/ep{ep_num:03d}.md 로 승격 후 컨텍스트 갱신(Phase 4)으로 진행")
+
+
+def handle_draft_room(pf, state, args):
+    """v2.8: 작가실 릴레이 — G1광인→G2씨앗→C1판돈→C2디테일 자동, K1~K3은 라이브 Claude."""
+    from .pipeline import run_draft_room, DEFAULT_ROOM_GEMINI, DEFAULT_ROOM_CODEX
+
+    if not state.selected_developments:
+        print(display.error("선정된 전개가 없습니다. Phase 2에서 전개를 먼저 선정하세요."))
+        sys.exit(1)
+
+    gemini_worker = {"type": args.gemini.strip(), "model": "", "timeout": 900} if getattr(args, "gemini", None) else None
+    codex_worker = {"type": args.codex.strip(), "model": "", "timeout": 900} if getattr(args, "codex", None) else None
+
+    g_name = (gemini_worker or DEFAULT_ROOM_GEMINI)["type"]
+    c_name = (codex_worker or DEFAULT_ROOM_CODEX)["type"]
+    ep_num = state.episode_count + 1
+    print(f"작가실 릴레이 시작 (ep{ep_num:03d}): G1·G2={g_name} → C1·C2={c_name} ...")
+
+    result = run_draft_room(pf.root, state, gemini_worker=gemini_worker, codex_worker=codex_worker)
+
+    print()
+    for s in result["stages"]:
+        if s["ok"]:
+            print(display.ok(f"{s['stage']} ({s['model']}): {s['chars']:,}자 → {s['path'].name}"))
+        else:
+            print(display.error(f"{s['stage']} ({s['model']}): 실패 — {s['error']}"))
+
+    making_rel = result["making_dir"].relative_to(pf.root)
+    if not result["ready_for_live"]:
+        print(display.error("자동 릴레이(G1~C2)가 완료되지 않았습니다. 위 오류를 확인하세요."))
+        sys.exit(1)
+
+    print()
+    print(f"히스토리: {making_rel}/ (전 단계 보존, 덮어쓰기 없음)")
+    print()
+    print("다음 단계 (라이브 조율 K1→K2→K3, Claude Code):")
+    print(f"  1) {making_rel}/04_c2_detail.md 를 읽습니다.")
+    print("  2) K1 톤조율: 폭주 에너지를 톤·리듬에 맞게 깎되 재미는 보존 → 05_k1_tone.md")
+    print("  3) K2 정합성감사: 플롯·캐릭터·복선 충돌 검수·수선 → 06_k2_audit.md")
+    print("  4) K3 교정: 맞춤법·오탈자·띄어쓰기·비문 라인 레벨 일소 (맨 마지막) → 07_k3_copyedit.md")
+    print(f"  5) 재미 보존 점검: python nf.py fun-diff {making_rel}/04_c2_detail.md {making_rel}/07_k3_copyedit.md")
+    print("  6) PD에게 제시: [A]승인 / [M]수정 / [D]폐기")
+    print(f"  7) A → episodes/ep{ep_num:03d}.md 로 승격 후 컨텍스트 갱신(Phase 4)으로 진행")
