@@ -1,0 +1,13 @@
+{
+  "name": "deluxe",
+  "description": "7단 작가실 (광기→씨앗→판돈→디테일→톤→감사→교정). v2.8 동작과 동등.",
+  "stages": [
+    { "role": "chaos",  "stem": "01_g1_chaos" },
+    { "role": "seed",   "stem": "02_g2_seed" },
+    { "role": "stakes", "stem": "03_c1_stakes" },
+    { "role": "detail", "stem": "04_c2_detail" },
+    { "role": "tone",   "stem": "05_k1_tone" },
+    { "role": "audit",  "stem": "06_k2_audit" },
+    { "role": "copy",   "stem": "07_k3_copyedit" }
+  ]
+}

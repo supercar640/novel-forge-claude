@@ -121,9 +121,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_pipe.add_argument("--draft", default=None, help="초고 worker 타입 (기본: gemini-cli)")
     p_pipe.add_argument("--revise", default=None, help="1차 퇴고 worker 타입 (기본: codex-cli)")
 
-    p_room = sub.add_parser("draft-room", help="v2.8: 6에이전트 작가실 릴레이 집필 (발상→증폭→조율)")
-    p_room.add_argument("--gemini", default=None, help="발상 단계(G1·G2) worker 타입 (기본: gemini-cli)")
-    p_room.add_argument("--codex", default=None, help="증폭 단계(C1·C2) worker 타입 (기본: codex-cli)")
+    p_room = sub.add_parser("draft-room", help="v2.9: 작가실 릴레이 집필 (토폴로지×크루×역할 합성)")
+    p_room.add_argument("--topology", default=None, help="단계 구성 (lean/deluxe/fast, 기본: defaults.json)")
+    p_room.add_argument("--crew", default=None, help="LLM 배정 (balanced/all-gemini/cheap/premium 등, 기본: defaults.json)")
+    p_room.add_argument(
+        "--override", action="append", default=None,
+        help="일회성 덮어쓰기 (dot-path), 예: stakes.worker.type=codex-cli (반복 가능)",
+    )
+    p_room.add_argument("--gemini", default=None, help="[deprecated] 발상 단계 worker (→ --override 사용)")
+    p_room.add_argument("--codex", default=None, help="[deprecated] 증폭 단계 worker (→ --override 사용)")
+
+    # v2.9: 작가실 프리셋 조회/스캐폴드
+    p_rlist = sub.add_parser("room-list", help="v2.9: 작가실 토폴로지·크루 나열 (빌트인+프로젝트)")
+    sub.add_parser("room-roles", help="v2.9: 작가실 역할 나열 (빌트인+프로젝트, 출처 표시)")
+    p_rshow = sub.add_parser("room-show", help="v2.9: 토폴로지+크루 합성 결과 미리보기")
+    p_rshow.add_argument("topology", help="토폴로지 이름")
+    p_rshow.add_argument("crew", help="크루 이름")
+    p_rshow.add_argument(
+        "--override", action="append", default=None,
+        help="일회성 덮어쓰기 (dot-path), 예: stakes.worker.type=codex-cli",
+    )
+    sub.add_parser("room-init", help="v2.9: 프로젝트에 draft_room/ 프리셋 스캐폴드 복사")
 
     # v2.4: 재미/취향 학습 토대
     p_taste = sub.add_parser("taste-init", help="v2.4: 취향 프로파일 시드 (context/taste_profile.md)")
@@ -340,6 +358,14 @@ def main(argv=None):
         handle_draft_pipeline(pf, state, args)
     elif args.command == "draft-room":
         handle_draft_room(pf, state, args)
+    elif args.command == "room-list":
+        handle_room_list(pf)
+    elif args.command == "room-roles":
+        handle_room_roles(pf)
+    elif args.command == "room-show":
+        handle_room_show(pf, args)
+    elif args.command == "room-init":
+        handle_room_init(pf)
     elif args.command == "taste-init":
         handle_taste_init(pf, args)
     elif args.command == "taste-learn":
@@ -1070,22 +1096,62 @@ def handle_draft_pipeline(pf, state, args):
 
 
 def handle_draft_room(pf, state, args):
-    """v2.8: 작가실 릴레이 — G1광인→G2씨앗→C1판돈→C2디테일 자동, K1~K3은 라이브 Claude."""
-    from .pipeline import run_draft_room, DEFAULT_ROOM_GEMINI, DEFAULT_ROOM_CODEX
+    """v2.9: 작가실 릴레이 — 토폴로지×크루×역할 합성으로 stage 자동 실행, live 단계는 라이브 안내."""
+    from .pipeline import run_draft_room
+    from .draft_room_presets import compose, load_defaults, parse_overrides, PresetError
 
     if not state.selected_developments:
         print(display.error("선정된 전개가 없습니다. Phase 2에서 전개를 먼저 선정하세요."))
         sys.exit(1)
 
-    gemini_worker = {"type": args.gemini.strip(), "model": "", "timeout": 900} if getattr(args, "gemini", None) else None
-    codex_worker = {"type": args.codex.strip(), "model": "", "timeout": 900} if getattr(args, "codex", None) else None
+    defaults = load_defaults(pf.root)
+    topology = (getattr(args, "topology", None) or defaults["topology"]).strip()
+    crew = (getattr(args, "crew", None) or defaults["crew"]).strip()
 
-    g_name = (gemini_worker or DEFAULT_ROOM_GEMINI)["type"]
-    c_name = (codex_worker or DEFAULT_ROOM_CODEX)["type"]
+    # override 파싱 (+ deprecated --gemini/--codex 호환)
+    try:
+        overrides = parse_overrides(getattr(args, "override", None))
+    except PresetError as e:
+        print(display.error(str(e)))
+        sys.exit(1)
+    def _dep_worker(role, wtype):
+        w = overrides.setdefault(role, {})
+        if not isinstance(w.get("worker"), dict):
+            w["worker"] = {}
+        w["worker"]["type"] = wtype
+
+    dep = []
+    if getattr(args, "gemini", None):
+        for r in ("chaos", "seed"):
+            _dep_worker(r, args.gemini.strip())
+        dep.append("--gemini")
+    if getattr(args, "codex", None):
+        for r in ("stakes", "detail"):
+            _dep_worker(r, args.codex.strip())
+        dep.append("--codex")
+    if dep:
+        print(f"[WARN] {', '.join(dep)} 는 deprecated 입니다. 다음 버전에서 제거됩니다. "
+              "`--override <역할>.worker.type=...` 또는 `--crew` 를 사용하세요.")
+
+    # 합성 (회차 실행 전에 미리 — 프리셋 오류를 일찍 잡는다)
+    try:
+        plan = compose(pf.root, topology, crew, overrides)
+    except PresetError as e:
+        print(display.error(str(e)))
+        print("사용 가능한 프리셋: python nf.py room-list / room-roles")
+        sys.exit(1)
+
+    # 기본값(인자 미지정)으로 lean 을 쓰는 경우 마이그레이션 안내 (v2.8 동작은 deluxe)
+    if not getattr(args, "topology", None) and topology == "lean":
+        print("[안내] 기본 토폴로지가 lean(3단)입니다. v2.8 7단 동작은 `--topology deluxe` 로 실행하세요.")
+
     ep_num = state.episode_count + 1
-    print(f"작가실 릴레이 시작 (ep{ep_num:03d}): G1·G2={g_name} → C1·C2={c_name} ...")
+    auto_stages = [s for s in plan["stages"] if s["mode"] == "auto"]
+    auto_summary = " → ".join(f"{s['title']}({s['worker']['type']})" for s in auto_stages) or "(자동 단계 없음)"
+    print(f"작가실 릴레이 시작 (ep{ep_num:03d}, topology={topology}, crew={crew}):")
+    print(f"  자동: {auto_summary}")
 
-    result = run_draft_room(pf.root, state, gemini_worker=gemini_worker, codex_worker=codex_worker)
+    result = run_draft_room(pf.root, state, topology=topology, crew=crew, overrides=overrides, plan=plan)
 
     print()
     for s in result["stages"]:
@@ -1096,17 +1162,94 @@ def handle_draft_room(pf, state, args):
 
     making_rel = result["making_dir"].relative_to(pf.root)
     if not result["ready_for_live"]:
-        print(display.error("자동 릴레이(G1~C2)가 완료되지 않았습니다. 위 오류를 확인하세요."))
+        print(display.error("자동 릴레이가 완료되지 않았습니다. 위 오류를 확인하세요."))
         sys.exit(1)
 
     print()
     print(f"히스토리: {making_rel}/ (전 단계 보존, 덮어쓰기 없음)")
     print()
-    print("다음 단계 (라이브 조율 K1→K2→K3, Claude Code):")
-    print(f"  1) {making_rel}/04_c2_detail.md 를 읽습니다.")
-    print("  2) K1 톤조율: 폭주 에너지를 톤·리듬에 맞게 깎되 재미는 보존 → 05_k1_tone.md")
-    print("  3) K2 정합성감사: 플롯·캐릭터·복선 충돌 검수·수선 → 06_k2_audit.md")
-    print("  4) K3 교정: 맞춤법·오탈자·띄어쓰기·비문 라인 레벨 일소 (맨 마지막) → 07_k3_copyedit.md")
-    print(f"  5) 재미 보존 점검: python nf.py fun-diff {making_rel}/04_c2_detail.md {making_rel}/07_k3_copyedit.md")
-    print("  6) PD에게 제시: [A]승인 / [M]수정 / [D]폐기")
-    print(f"  7) A → episodes/ep{ep_num:03d}.md 로 승격 후 컨텍스트 갱신(Phase 4)으로 진행")
+
+    live_stages = result["live_stages"]
+    last_auto = result["last_path"].name if result["last_path"] else None
+
+    if live_stages:
+        print("다음 단계 (라이브 조율, Claude Code):")
+        n = 1
+        print(f"  {n}) {making_rel}/{last_auto} 를 읽습니다.")
+        prev_stem = result["last_path"].stem if result["last_path"] else None
+        for st in live_stages:
+            n += 1
+            print(f"  {n}) {st['title']}: {st['description']} → {st['stem']}.md")
+            prev_stem = st["stem"]
+        n += 1
+        print(f"  {n}) 재미 보존 점검: python nf.py fun-diff "
+              f"{making_rel}/{last_auto} {making_rel}/{prev_stem}.md")
+        n += 1
+        print(f"  {n}) PD에게 제시: [A]승인 / [M]수정 / [D]폐기")
+        n += 1
+        print(f"  {n}) A → episodes/ep{ep_num:03d}.md 로 승격 후 컨텍스트 갱신(Phase 4)으로 진행")
+    else:
+        first_auto = result["stages"][0]["path"].name if result["stages"] else None
+        print("전 단계 자동 완료 (라이브 조율 단계 없음).")
+        if first_auto and last_auto and first_auto != last_auto:
+            print(f"  재미 보존 점검: python nf.py fun-diff {making_rel}/{first_auto} {making_rel}/{last_auto}")
+        print(f"  최종본: {making_rel}/{last_auto}")
+        print("  PD에게 제시: [A]승인 / [M]수정 / [D]폐기")
+        print(f"  A → episodes/ep{ep_num:03d}.md 로 승격 후 컨텍스트 갱신(Phase 4)으로 진행")
+
+
+def handle_room_list(pf):
+    """v2.9: 작가실 토폴로지·크루 나열 (빌트인+프로젝트)."""
+    from .draft_room_presets import list_topologies, list_crews
+    print("토폴로지 (단계 구성):")
+    for t in list_topologies(pf.root):
+        print(f"  {t['name']:<10} [{t['source']}] {t['stages']}단 — {t['description']}")
+    print()
+    print("크루 (LLM 배정):")
+    for c in list_crews(pf.root):
+        print(f"  {c['name']:<12} [{c['source']}] {c['description']}")
+    print()
+    print("미리보기: python nf.py room-show <토폴로지> <크루>")
+
+
+def handle_room_roles(pf):
+    """v2.9: 작가실 역할 나열 (빌트인+프로젝트, 출처 표시)."""
+    from .draft_room_presets import list_roles
+    print("역할 (프롬프트 + 기본값):")
+    for r in list_roles(pf.root):
+        print(f"  {r['name']:<10} [{r['source']}] {r['title']} — {r['description']}")
+
+
+def handle_room_show(pf, args):
+    """v2.9: 토폴로지+크루 합성 결과 미리보기."""
+    from .draft_room_presets import compose, parse_overrides, PresetError
+    try:
+        overrides = parse_overrides(getattr(args, "override", None))
+        plan = compose(pf.root, args.topology.strip(), args.crew.strip(), overrides)
+    except PresetError as e:
+        print(display.error(str(e)))
+        sys.exit(1)
+    print(f"topology={plan['topology']} [{plan['topology_source']}] — {plan['topology_desc']}")
+    print(f"crew={plan['crew']} [{plan['crew_source']}] — {plan['crew_desc']}")
+    print()
+    for i, s in enumerate(plan["stages"], 1):
+        if s["mode"] == "live":
+            who = "live (Claude Code + PD)"
+        else:
+            w = s["worker"]
+            who = w["type"] + (f" ({w['model']})" if w.get("model") else "")
+        print(f"  {i}. {s['stem']:<14} {s['role']:<8} → {who}  [temp={s['temperature']}, mode={s['mode']}]")
+
+
+def handle_room_init(pf):
+    """v2.9: 프로젝트에 draft_room/ 프리셋 스캐폴드 복사 (빌트인 → projects/{title}/draft_room/)."""
+    import shutil
+    from .draft_room_presets import BUILTIN_DIR
+    dest = pf.root / "draft_room"
+    if dest.exists():
+        print(display.error(f"이미 존재합니다: {dest.relative_to(pf.root)}/ (덮어쓰지 않음)"))
+        sys.exit(1)
+    shutil.copytree(BUILTIN_DIR, dest)
+    print(display.ok(f"draft_room/ 스캐폴드 복사 완료 → {dest.relative_to(pf.root)}/"))
+    print("이제 이 디렉토리의 roles/*.md, topologies/*.json, crews/*.json 을 수정하면")
+    print("빌트인보다 우선 적용됩니다. 신규 역할도 roles/ 에 .md 한 장 추가로 끝.")

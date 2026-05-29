@@ -24,8 +24,6 @@ from .config import create_provider
 # 집필은 5,500자+ 본문이라 전개안 생성보다 훨씬 오래 걸린다 → 넉넉한 타임아웃.
 DEFAULT_DRAFT_WORKER = {"type": "gemini-cli", "model": "", "timeout": 900}
 DEFAULT_REVISE_WORKER = {"type": "codex-cli", "model": "", "timeout": 600}
-DEFAULT_ROOM_GEMINI = {"type": "gemini-cli", "model": "", "timeout": 1800}
-DEFAULT_ROOM_CODEX = {"type": "codex-cli", "model": "", "timeout": 1800}
 
 # 초고(Gemini)용 추가 지시 — "막 갈김": 다듬기보다 분량·기세·완결.
 DRAFT_INSTRUCTIONS = (
@@ -35,27 +33,8 @@ DRAFT_INSTRUCTIONS = (
     "- 전개를 시원하게 밀어붙이고 장면을 충분히 살리세요."
 )
 
-ROLE_G1 = (
-    "당신은 **광인(狂人)** 입니다. 장르 관습을 박살내세요. 개연성은 잠시 잊으세요. "
-    "금기·반전·기상천외한 설정을 밀도 있게 투척하세요. **안전한 전개를 쓰면 실패입니다.** "
-    "분량은 채우되, 매 장면 최소 하나의 '예상 못한 것'을 심으세요. 평가 기준은 분량·속도가 "
-    "아니라 발상의 밀도와 예측 불가능성입니다. 대충 쓰지 말고, 가장 과감하게 상상하세요."
-)
-ROLE_G2 = (
-    "당신은 **씨앗채굴자** 입니다. 직전 광기 원고에서 이야기로 자랄 한 줄을 골라내세요. "
-    "미친 발상을 버리지 말고, 캐릭터의 동기·감정 훅으로 묶어 광기에 뿌리를 주세요. "
-    "독자가 이 폭주를 따라올 이유를 만드세요. 과감함은 유지하되, 서사의 척추를 세우세요."
-)
-ROLE_C1 = (
-    "당신은 **판돈러** 입니다. 직전 원고를 절대 깎지 마세요. 'Yes, and—'로 받으세요. "
-    "위기·배신·스케일·감정의 판돈을 더 키우세요. 더 개오바를 떠세요. 안전하게 정리하려는 "
-    "충동을 죽이세요. 밋밋해지는 순간을 용납하지 마세요."
-)
-ROLE_C2 = (
-    "당신은 **디테일변태** 입니다. 직전 원고를 명장면 후보로 만드세요. 결정적 대사·감각 묘사·"
-    "연출을 과장되게 디테일링하세요. 밋밋한 줄을 못 견디세요. 독자의 뇌리에 박힐 장면·대사를 "
-    "최소 하나 만드세요."
-)
+# 작가실 역할 프롬프트·단계 구성·LLM 배정은 nf/presets/draft_room/ (토폴로지×크루×역할)로
+# 외부화됐다. run_draft_room 은 draft_room_presets.compose() 결과로 stage 루프를 돈다.
 
 
 def _stage_header(stage: str, model: str, ep_num: int, source: Optional[str], chars: int) -> str:
@@ -167,17 +146,28 @@ def run_draft_room(
     project_root: Path,
     state,
     prompts_dir: Optional[Path] = None,
-    gemini_worker: Optional[dict] = None,
-    codex_worker: Optional[dict] = None,
+    *,
+    topology: str = "lean",
+    crew: str = "balanced",
+    overrides: Optional[dict] = None,
+    plan: Optional[dict] = None,
 ) -> dict:
-    """G1→G2→C1→C2 작가실 릴레이 자동 실행.
+    """작가실 릴레이 자동 실행 — 토폴로지×크루×역할 합성 계획에 따라 stage 루프.
+
+    auto 단계는 외부 워커로 자동 실행하고, 첫 live 단계부터는(이후 전부) 라이브 안내로
+    넘긴다 (Claude Code + PD 가 수행). 모든 산출물은 ep###_making/ 에 새 파일로 보존.
 
     Returns:
-        {"ep_num", "making_dir", "stages": [ {stage, model, ok, path, chars, error} ],
-         "ready_for_live": bool, "last_path": Path|None}
+        {"ep_num", "making_dir",
+         "stages":      [ {stage, model, ok, path, chars, error} ],   # 자동 실행분
+         "live_stages": [ {role, title, description, stem} ],          # 라이브 안내분
+         "ready_for_live": bool, "last_path": Path|None,
+         "topology", "crew", "plan"}
     """
-    gemini_worker = gemini_worker or DEFAULT_ROOM_GEMINI
-    codex_worker = codex_worker or DEFAULT_ROOM_CODEX
+    from .draft_room_presets import compose
+
+    if plan is None:
+        plan = compose(project_root, topology, crew, overrides or {})
 
     # 5,500자 분량 게이트는 webnovel 모드 한정. 그 외에는 분량을 강제하지 않는다.
     min_chars = 5500 if state.config.get("webnovel", True) else None
@@ -196,19 +186,29 @@ def run_draft_room(
     if template_path.exists():
         room_template = template_path.read_text(encoding="utf-8")
 
-    stage_defs = [
-        ("G1 광인", ROLE_G1, gemini_worker, 1.0, "01_g1_chaos"),
-        ("G2 씨앗채굴자", ROLE_G2, gemini_worker, 0.8, "02_g2_seed"),
-        ("C1 판돈러", ROLE_C1, codex_worker, 0.9, "03_c1_stakes"),
-        ("C2 디테일변태", ROLE_C2, codex_worker, 0.9, "04_c2_detail"),
-    ]
-
     stages: list[dict] = []
+    live_stages: list[dict] = []
     prior = None
     previous_path = None
     last_path = None
+    hit_live = False
+    auto_failed = False
 
-    for role_title, instructions, worker, temp, stem in stage_defs:
+    for st in plan["stages"]:
+        # 첫 live 단계 이후는 (auto 라도) 전부 라이브 안내로 — 자동 체이닝이 불가하기 때문.
+        if st["mode"] == "live" or hit_live:
+            hit_live = True
+            live_stages.append({
+                "role": st["role"],
+                "title": st["title"],
+                "description": st["description"],
+                "stem": st["stem"],
+            })
+            continue
+
+        worker = st["worker"]
+        role_title = st["title"]
+        stem = st["stem"]
         stage = {
             "stage": role_title,
             "model": worker["type"],
@@ -228,9 +228,9 @@ def run_draft_room(
             text = agent.relay_pass(
                 context,
                 role_title,
-                instructions,
+                st["instructions"],
                 prior_text=prior,
-                temperature=temp,
+                temperature=st["temperature"],
                 min_chars=min_chars,
             )
             path = _versioned_path(making_dir, stem)
@@ -253,13 +253,20 @@ def run_draft_room(
         except Exception as e:  # noqa: BLE001
             stage["error"] = str(e)
             stages.append(stage)
+            auto_failed = True
             break
         stages.append(stage)
+
+    ready_for_live = (not auto_failed) and all(s["ok"] for s in stages)
 
     return {
         "ep_num": ep_num,
         "making_dir": making_dir,
         "stages": stages,
-        "ready_for_live": all(s["ok"] for s in stages) and len(stages) == 4,
+        "live_stages": live_stages,
+        "ready_for_live": ready_for_live,
         "last_path": last_path,
+        "topology": plan["topology"],
+        "crew": plan["crew"],
+        "plan": plan,
     }

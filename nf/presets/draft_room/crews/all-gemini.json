@@ -1,0 +1,6 @@
+{
+  "name": "all-gemini",
+  "description": "모든 단계 Gemini 자동 (라이브 체크포인트 없음). 단일 모델 일관 진행.",
+  "default": { "type": "gemini-cli", "timeout": 1800 },
+  "workers": {}
+}

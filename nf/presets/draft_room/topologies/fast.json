@@ -1,0 +1,8 @@
+{
+  "name": "fast",
+  "description": "2단 (발상→조율). 가장 빠른 1회차 초안.",
+  "stages": [
+    { "role": "chaos", "stem": "01_draft" },
+    { "role": "audit", "stem": "02_polish" }
+  ]
+}

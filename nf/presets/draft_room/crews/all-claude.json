@@ -1,0 +1,6 @@
+{
+  "name": "all-claude",
+  "description": "모든 단계 claude-cli 자동 (라이브 체크포인트 없음). claude CLI 서브프로세스로 전 단계 실행.",
+  "default": { "type": "claude-cli", "timeout": 1800 },
+  "workers": {}
+}

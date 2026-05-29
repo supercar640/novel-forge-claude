@@ -1,0 +1,6 @@
+{
+  "name": "cheap",
+  "description": "비용 최소 — 전 단계 Gemini 자동, 라이브 없음. lean/fast 토폴로지와 조합 권장.",
+  "default": { "type": "gemini-cli", "timeout": 1200 },
+  "workers": {}
+}

@@ -1,0 +1,14 @@
+{
+  "name": "balanced",
+  "description": "발상=Gemini, 증폭=Codex, 조율=Claude 라이브 (v2.8 기본). 조율 단계에 PD 검수 체크포인트 보존.",
+  "default": { "type": "gemini-cli", "timeout": 1800 },
+  "workers": {
+    "chaos":  { "type": "gemini-cli" },
+    "seed":   { "type": "gemini-cli" },
+    "stakes": { "type": "codex-cli" },
+    "detail": { "type": "codex-cli" },
+    "tone":   "live",
+    "audit":  "live",
+    "copy":   "live"
+  }
+}

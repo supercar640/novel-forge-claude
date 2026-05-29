@@ -1,0 +1,14 @@
+{
+  "name": "premium",
+  "description": "단계별 최강 모델 — 발상=Gemini, 증폭=Codex, 톤·감사=claude-cli 자동, 최종 교정=Claude 라이브(PD 검수).",
+  "default": { "type": "codex-cli", "timeout": 1800 },
+  "workers": {
+    "chaos":  { "type": "gemini-cli" },
+    "seed":   { "type": "gemini-cli" },
+    "stakes": { "type": "codex-cli" },
+    "detail": { "type": "codex-cli" },
+    "tone":   { "type": "claude-cli" },
+    "audit":  { "type": "claude-cli" },
+    "copy":   "live"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "lean",
+  "description": "3단 (발상→증폭→조율). 저비용·일상용 기본.",
+  "stages": [
+    { "role": "chaos",  "stem": "01_draft" },
+    { "role": "stakes", "stem": "02_amp" },
+    { "role": "audit",  "stem": "03_polish" }
+  ]
+}
