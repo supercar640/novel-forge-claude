@@ -1104,9 +1104,14 @@ def handle_draft_room(pf, state, args):
         print(display.error("선정된 전개가 없습니다. Phase 2에서 전개를 먼저 선정하세요."))
         sys.exit(1)
 
+    # 해석 우선순위: 인자 > 지난 회차 기록(state) > defaults.json
     defaults = load_defaults(pf.root)
-    topology = (getattr(args, "topology", None) or defaults["topology"]).strip()
-    crew = (getattr(args, "crew", None) or defaults["crew"]).strip()
+    topo_arg = getattr(args, "topology", None)
+    crew_arg = getattr(args, "crew", None)
+    last_topo = state.config.get("last_room_topology")
+    last_crew = state.config.get("last_room_crew")
+    topology = (topo_arg or last_topo or defaults["topology"]).strip()
+    crew = (crew_arg or last_crew or defaults["crew"]).strip()
 
     # override 파싱 (+ deprecated --gemini/--codex 호환)
     try:
@@ -1141,9 +1146,23 @@ def handle_draft_room(pf, state, args):
         print("사용 가능한 프리셋: python nf.py room-list / room-roles")
         sys.exit(1)
 
-    # 기본값(인자 미지정)으로 lean 을 쓰는 경우 마이그레이션 안내 (v2.8 동작은 deluxe)
-    if not getattr(args, "topology", None) and topology == "lean":
+    # 지난 회차 설정 재사용 안내 (인자 없이 state 기록을 가져온 경우)
+    reused = []
+    if not topo_arg and last_topo:
+        reused.append(f"topology={topology}")
+    if not crew_arg and last_crew:
+        reused.append(f"crew={crew}")
+    if reused:
+        print(f"[안내] 지난 회차 설정 재사용: {', '.join(reused)} (바꾸려면 --topology/--crew)")
+    # 기록도 인자도 없이 빌트인 기본 lean 을 쓰는 첫 실행이면 마이그레이션 안내 (v2.8 동작은 deluxe)
+    elif not topo_arg and not last_topo and topology == "lean":
         print("[안내] 기본 토폴로지가 lean(3단)입니다. v2.8 7단 동작은 `--topology deluxe` 로 실행하세요.")
+
+    # 사용 조합을 state 에 기록 (다음 회차 자동 제안용)
+    if state.config.get("last_room_topology") != topology or state.config.get("last_room_crew") != crew:
+        state.config["last_room_topology"] = topology
+        state.config["last_room_crew"] = crew
+        pf.save_state(state)
 
     ep_num = state.episode_count + 1
     auto_stages = [s for s in plan["stages"] if s["mode"] == "auto"]

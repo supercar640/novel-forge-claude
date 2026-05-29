@@ -172,7 +172,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - **토폴로지** = 단계 순서·stem (`topologies/*.json`). 빌트인 3종: `lean`(3단·기본) / `deluxe`(7단·v2.8 동등) / `fast`(2단).
   - **크루** = 각 역할을 누가 실행할지 (`crews/*.json`). 빌트인 5종: `balanced`(발상=Gemini·증폭=Codex·조율=live, **v2.8 기본**) / `all-gemini` / `all-claude` / `cheap` / `premium`. 값은 worker dict `{type,model,timeout}` 또는 문자열 `"live"`.
   - **역할** = 프롬프트 본문 + 기본값 (`roles/*.md`, frontmatter `title/description/default_temperature/default_mode` + body). 빌트인 7종: chaos·seed·stakes·detail·tone·audit·copy. **신규 역할은 .md 한 장 추가로 끝.**
-1. `python nf.py draft-room` → defaults.json(기본 `lean`+`balanced`)으로 합성 후 **auto 단계 자동 실행** (외부 CLI). 조합 지정:
+1. `python nf.py draft-room` → 합성 후 **auto 단계 자동 실행** (외부 CLI). 토폴로지·크루 해석 우선순위는 **인자 > 지난 회차 기록(`state.json`의 `last_room_topology/crew`) > defaults.json(기본 `lean`+`balanced`)**. 인자 없이 실행하면 지난 회차에 쓴 조합을 재사용하고 안내한다. 조합 지정:
    - `python nf.py draft-room --topology deluxe --crew premium`
    - `python nf.py draft-room --crew all-gemini` (topology만 기본값)
    - `python nf.py draft-room --override stakes.worker.type=claude-cli --override chaos.temperature=0.7` (일회성 dot-path, 반복 가능)
