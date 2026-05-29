@@ -8,6 +8,9 @@ projects/
 # 아이디어/메모
 ideas/
 
+# HITL 세션 작업 노트 (save-hitl 산출물 — 로컬 전용)
+hitl/
+
 # 테스트용 레거시 프로젝트 (루트 레벨만)
 /ep_test/
 /test_novel/
